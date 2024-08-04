@@ -6,6 +6,7 @@ open import Data.Sum using ( inj₁; inj₂ )
 open import Data.Unit using ( ⊤ )
 open import Relation.Binary.Construct.Closure.ReflexiveTransitive using ( Star; _◅_ ) renaming ( ε to [] )
 open import Relation.Binary.Construct.Closure.ReflexiveTransitive.Properties using ( module StarReasoning )
+open import Relation.Binary.HeterogeneousEquality using ( _≅_ ) renaming ( refl to hrefl )
 open import Relation.Binary.PropositionalEquality using ( _≡_; refl; cong )
 open import Relation.Nullary using ( ¬_ )
 open import Relation.Nullary.Decidable
@@ -419,19 +420,31 @@ module M (Σ : Sig) where
   !InPEC-unique-tm (i ! c) vu ⟨⟩ vu' = ⊥-elim (V¬!InPEC vu' c)
   !InPEC-unique-tm (i ! c) vu (.i ! c') vu' rewrite !InPEC-unique-tm c vu c' vu' = refl
 
-  !InPEC-unique : {t : Tm Γ ε α} {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)}
+  !InPEC-unique' : {t : Tm Γ ε α} {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)}
     → (c c' : (i ! u) InPEC t) (v : Val u)
     → c ≡ c'
-  !InPEC-unique ⟨⟩ ⟨⟩ vu = refl
-  !InPEC-unique ⟨⟩ (_ ! c') vu = ⊥-elim (V¬!InPEC vu c')
-  !InPEC-unique (c ·₁ u) (c' ·₁ .u) vu rewrite !InPEC-unique c c' vu = refl
-  !InPEC-unique (c ·₁ u) (v ·₂ c') vu = ⊥-elim (V¬!InPEC v c)
-  !InPEC-unique (v ·₂ c) (c' ·₁ _) vu = ⊥-elim (V¬!InPEC v c')
-  !InPEC-unique (v ·₂ c) (v' ·₂ c') vu rewrite V-unique v v' | !InPEC-unique c c' vu = refl
-  !InPEC-unique (suc c) (suc c') vu rewrite !InPEC-unique c c' vu = refl
-  !InPEC-unique (case c z s) (case c' .z .s) vu rewrite !InPEC-unique c c' vu = refl
-  !InPEC-unique (i ! c) ⟨⟩ vu = ⊥-elim (V¬!InPEC vu c)
-  !InPEC-unique (i ! c) (.i ! c') vu rewrite !InPEC-unique c c' vu = refl
+  !InPEC-unique' ⟨⟩ ⟨⟩ vu = refl
+  !InPEC-unique' ⟨⟩ (_ ! c') vu = ⊥-elim (V¬!InPEC vu c')
+  !InPEC-unique' (c ·₁ u) (c' ·₁ .u) vu rewrite !InPEC-unique' c c' vu = refl
+  !InPEC-unique' (c ·₁ u) (v ·₂ c') vu = ⊥-elim (V¬!InPEC v c)
+  !InPEC-unique' (v ·₂ c) (c' ·₁ _) vu = ⊥-elim (V¬!InPEC v c')
+  !InPEC-unique' (v ·₂ c) (v' ·₂ c') vu rewrite V-unique v v' | !InPEC-unique' c c' vu = refl
+  !InPEC-unique' (suc c) (suc c') vu rewrite !InPEC-unique' c c' vu = refl
+  !InPEC-unique' (case c z s) (case c' .z .s) vu rewrite !InPEC-unique' c c' vu = refl
+  !InPEC-unique' (i ! c) ⟨⟩ vu = ⊥-elim (V¬!InPEC vu c)
+  !InPEC-unique' (i ! c) (.i ! c') vu rewrite !InPEC-unique' c c' vu = refl
+
+  !InPEC-unique : {t : Tm Γ ε α}
+    → {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)} (c : (i ! u) InPEC t) (v : Val u)
+    → {i' : ε ∋ₑ op'} {u' : Tm Γ ε (Dom' op')} (c' : (i' ! u') InPEC t) (v' : Val u')
+    → c ≅ c'
+  !InPEC-unique {i = i} c v {i'} c' v'
+    with refl ← !InPEC-unique-op c v c' v'
+    with refl ← ∋ₑ-unique i i'
+    with refl ← !InPEC-unique-tm c v c' v'
+    with refl ← V-unique v v'
+    with refl ← !InPEC-unique' c c' v
+    = hrefl
 
   ⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
   ⟶-deterministic (app v) (app v') rewrite V-unique v v' = refl
@@ -441,7 +454,7 @@ module M (Σ : Sig) where
     with refl ← ∋ₑ-unique i i'
     with refl ← !InPEC-unique-tm c v c' v'
     with refl ← V-unique v v'
-    with refl ← !InPEC-unique c c' v
+    with refl ← !InPEC-unique' c c' v
     = refl
   ⟶-deterministic case-zero case-zero = refl
   ⟶-deterministic (case-suc v) (case-suc v') rewrite V-unique v v' = refl

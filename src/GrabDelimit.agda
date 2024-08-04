@@ -1,9 +1,10 @@
 open import Data.Empty using ( ⊥; ⊥-elim )
 open import Data.Maybe using ( Maybe; just; nothing )
 open import Data.Nat using ( ℕ; zero; suc; _<_; _≤?_; z≤n; s≤s )
-open import Relation.Binary.PropositionalEquality using ( _≡_; refl; cong )
 open import Relation.Binary.Construct.Closure.ReflexiveTransitive using ( Star; _◅_ ) renaming ( ε to [] )
 open import Relation.Binary.Construct.Closure.ReflexiveTransitive.Properties using ( module StarReasoning )
+open import Relation.Binary.HeterogeneousEquality using ( _≅_ ) renaming ( refl to hrefl )
+open import Relation.Binary.PropositionalEquality using ( _≡_; refl; cong )
 open import Relation.Nullary using ( ¬_ )
 open import Relation.Nullary.Decidable using ( True; toWitness )
 
@@ -310,25 +311,34 @@ grabInPEC-unique-tm (v ·₂ c) (v' ·₂ c') rewrite grabInPEC-unique-tm c c' =
 grabInPEC-unique-tm (suc c) (suc c') rewrite grabInPEC-unique-tm c c' = refl
 grabInPEC-unique-tm (case c z s) (case c' .z .s) rewrite grabInPEC-unique-tm c c' = refl
 
-grabInPEC-unique : {t : Tm Γ (ε , α) β} {u : Tm (Γ , γ ⇒ α ! ε) ε α}
+grabInPEC-unique' : {t : Tm Γ (ε , α) β} {u : Tm (Γ , γ ⇒ α ! ε) ε α}
   → (c c' : grab u InPEC t)
   → c ≡ c'
-grabInPEC-unique ⟨⟩ ⟨⟩ = refl
-grabInPEC-unique (c ·₁ u) (c' ·₁ .u) rewrite grabInPEC-unique c c' = refl
-grabInPEC-unique (c ·₁ u) (v ·₂ c') = ⊥-elim (V¬grabInPEC v c)
-grabInPEC-unique (v ·₂ c) (c' ·₁ _) = ⊥-elim (V¬grabInPEC v c')
-grabInPEC-unique (v ·₂ c) (v' ·₂ c') rewrite grabInPEC-unique c c' | V-unique v v' = refl
-grabInPEC-unique (suc c) (suc c') rewrite grabInPEC-unique c c' = refl
-grabInPEC-unique (case c z s) (case c' .z .s) rewrite grabInPEC-unique c c' = refl
+grabInPEC-unique' ⟨⟩ ⟨⟩ = refl
+grabInPEC-unique' (c ·₁ u) (c' ·₁ .u) rewrite grabInPEC-unique' c c' = refl
+grabInPEC-unique' (c ·₁ u) (v ·₂ c') = ⊥-elim (V¬grabInPEC v c)
+grabInPEC-unique' (v ·₂ c) (c' ·₁ _) = ⊥-elim (V¬grabInPEC v c')
+grabInPEC-unique' (v ·₂ c) (v' ·₂ c') rewrite grabInPEC-unique' c c' | V-unique v v' = refl
+grabInPEC-unique' (suc c) (suc c') rewrite grabInPEC-unique' c c' = refl
+grabInPEC-unique' (case c z s) (case c' .z .s) rewrite grabInPEC-unique' c c' = refl
+
+grabInPEC-unique : {t : Tm Γ (ε , α) β}
+  → {u : Tm (Γ , γ ⇒ α ! ε) ε α} (c : grab u InPEC t)
+  → {u' : Tm (Γ , δ ⇒ α ! ε) ε α} (c' : grab u' InPEC t)
+  → c ≅ c'
+grabInPEC-unique c c'
+  with refl ← grabInPEC-unique-ty c c'
+  with refl ← grabInPEC-unique-tm c c'
+  with refl ← grabInPEC-unique' c c'
+  = hrefl
 
 ⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
 ⟶-deterministic (app {t = t} v) (app v') rewrite V-unique v v' = refl
 ⟶-deterministic (delimit-val v) (delimit-val v') rewrite V-unique v v' = refl
--- Is there a better way to do this?
 ⟶-deterministic (delimit-grab c) (delimit-grab c')
   with refl ← grabInPEC-unique-ty c c'
   with refl ← grabInPEC-unique-tm c c'
-  with refl ← grabInPEC-unique c c'
+  with refl ← grabInPEC-unique' c c'
   = refl
 ⟶-deterministic case-zero case-zero = refl
 ⟶-deterministic (case-suc v) (case-suc v') rewrite V-unique v v' = refl

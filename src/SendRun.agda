@@ -4,6 +4,7 @@ open import Data.Nat using ( ℕ; zero; suc; _<_; _≤?_; z≤n; s≤s )
 open import Function using ( _∘′_ )
 open import Relation.Binary.Construct.Closure.ReflexiveTransitive using ( Star; _◅_ ) renaming ( ε to [] )
 open import Relation.Binary.Construct.Closure.ReflexiveTransitive.Properties using ( module StarReasoning )
+open import Relation.Binary.HeterogeneousEquality using ( _≅_ ) renaming ( refl to hrefl )
 open import Relation.Binary.PropositionalEquality using ( _≡_; refl; cong )
 open import Relation.Nullary using ( ¬_ )
 open import Relation.Nullary.Decidable using ( True; toWitness )
@@ -335,19 +336,30 @@ sendInPEC-unique-tm (case c z s) vu (case c' .z .s) vu' rewrite sendInPEC-unique
 sendInPEC-unique-tm (send c) vu ⟨⟩ vu' = ⊥-elim (V¬sendInPEC vu' c)
 sendInPEC-unique-tm (send c) vu (send c') vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
 
-sendInPEC-unique : {t : Tm Γ ε α} {u : Tm Γ (γ ➡ β) γ}
+sendInPEC-unique' : {t : Tm Γ ε α} {u : Tm Γ (γ ➡ β) γ}
   → (c c' : send u InPEC t) (v : Val u)
   → c ≡ c'
-sendInPEC-unique ⟨⟩ ⟨⟩ vu = refl
-sendInPEC-unique ⟨⟩ (send c') vu = ⊥-elim (V¬sendInPEC vu c')
-sendInPEC-unique (c ·₁ u) (c' ·₁ .u) vu rewrite sendInPEC-unique c c' vu = refl
-sendInPEC-unique (c ·₁ u) (v ·₂ c') vu = ⊥-elim (V¬sendInPEC v c)
-sendInPEC-unique (v ·₂ c) (c' ·₁ _) vu = ⊥-elim (V¬sendInPEC v c')
-sendInPEC-unique (v ·₂ c) (v' ·₂ c') vu rewrite V-unique v v' | sendInPEC-unique c c' vu = refl
-sendInPEC-unique (suc c) (suc c') vu rewrite sendInPEC-unique c c' vu = refl
-sendInPEC-unique (case c z s) (case c' .z .s) vu rewrite sendInPEC-unique c c' vu = refl
-sendInPEC-unique (send c) ⟨⟩ vu = ⊥-elim (V¬sendInPEC vu c)
-sendInPEC-unique (send c) (send c') vu rewrite sendInPEC-unique c c' vu = refl
+sendInPEC-unique' ⟨⟩ ⟨⟩ vu = refl
+sendInPEC-unique' ⟨⟩ (send c') vu = ⊥-elim (V¬sendInPEC vu c')
+sendInPEC-unique' (c ·₁ u) (c' ·₁ .u) vu rewrite sendInPEC-unique' c c' vu = refl
+sendInPEC-unique' (c ·₁ u) (v ·₂ c') vu = ⊥-elim (V¬sendInPEC v c)
+sendInPEC-unique' (v ·₂ c) (c' ·₁ _) vu = ⊥-elim (V¬sendInPEC v c')
+sendInPEC-unique' (v ·₂ c) (v' ·₂ c') vu rewrite V-unique v v' | sendInPEC-unique' c c' vu = refl
+sendInPEC-unique' (suc c) (suc c') vu rewrite sendInPEC-unique' c c' vu = refl
+sendInPEC-unique' (case c z s) (case c' .z .s) vu rewrite sendInPEC-unique' c c' vu = refl
+sendInPEC-unique' (send c) ⟨⟩ vu = ⊥-elim (V¬sendInPEC vu c)
+sendInPEC-unique' (send c) (send c') vu rewrite sendInPEC-unique' c c' vu = refl
+
+sendInPEC-unique : {t : Tm Γ ε α}
+  → {u : Tm Γ (γ ➡ β) γ} (c : send u InPEC t) (v : Val u)
+  → {u' : Tm Γ (δ ➡ β) δ} (c' : send u' InPEC t) (v' : Val u')
+  → c ≅ c'
+sendInPEC-unique c v c' v'
+  with refl ← sendInPEC-unique-ty c v c' v'
+  with refl ← sendInPEC-unique-tm c v c' v'
+  with refl ← V-unique v v'
+  with refl ← sendInPEC-unique' c c' v
+  = hrefl
 
 ⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
 ⟶-deterministic (app v) (app v') rewrite V-unique v v' = refl
@@ -356,7 +368,7 @@ sendInPEC-unique (send c) (send c') vu rewrite sendInPEC-unique c c' vu = refl
   with refl ← sendInPEC-unique-ty c v c' v'
   with refl ← sendInPEC-unique-tm c v c' v'
   with refl ← V-unique v v'
-  with refl ← sendInPEC-unique c c' v
+  with refl ← sendInPEC-unique' c c' v
   = refl
 ⟶-deterministic case-zero case-zero = refl
 ⟶-deterministic (case-suc v) (case-suc v') rewrite V-unique v v' = refl
