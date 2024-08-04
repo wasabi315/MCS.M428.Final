@@ -37,7 +37,7 @@ data Ctx : Set where
 
 variable
   Γ Δ : Ctx
-  α β γ αₕ : Ty
+  α β γ δ αₕ : Ty
   ε ε' εₕ : Eff
 
 data _∋_ : Ctx → Ty → Set where
@@ -193,7 +193,7 @@ data _⟶_ : Tm Γ ε α → Tm Γ ε α → Set where
     → (c : send u InPEC t)
     → (v : Val u)
     → {h : Tm (Γ , α , β ⇒ γ ! ε) ε γ}
-    → run t h ⟶ h [ ƛ run (↑PEC ↑PEC c ⟨ var# 0 ⟩) (ren (ext (ext (suc ∘′ suc))) h) ] [ coe v ]
+    → run t h ⟶ h [ ƛ run (↑PEC ↑PEC c ⟨ var zero ⟩) (ren (ext (ext (suc ∘′ suc))) h) ] [ coe v ]
 
   case-zero : ∀ {z : Tm Γ ε α} {s}
     → case zero z s ⟶ z
@@ -285,50 +285,100 @@ V-unique (ƛ t) (ƛ .t) = refl
 V-unique zero zero = refl
 V-unique (suc v) (suc v') = cong suc (V-unique v v')
 
--- V¬⟨send⟩ : {t : Tm Γ ε α} {u : Tm Γ (β ➡ γ) β}
---   → Val t
---   → ¬ InCtx (send u) t
--- V¬⟨send⟩ (suc v) (suc c) = V¬⟨send⟩ v c
+V¬sendInPEC : {u : Tm Γ (α ➡ β) α} {t : Tm Γ ε γ}
+  → Val t
+  → ¬ (send u InPEC t)
+V¬sendInPEC (suc v) (suc c) = V¬sendInPEC v c
 
--- ⟨send⟩¬⟶ : {u : Tm Γ (α ➡ β) α} {t t' : Tm Γ ε γ}
---   → Val u
---   → InCtx (send u) t
---   → ¬ (t ⟶ t')
--- ⟨send⟩¬⟶ v ⟨⟩ (cong-send t⟶t') = V¬⟶ v t⟶t'
--- ⟨send⟩¬⟶ v (c ·₁ u) (cong-·₁ t⟶t') = ⟨send⟩¬⟶ v c t⟶t'
--- ⟨send⟩¬⟶ v (c ·₁ u) (cong-·₂ v' t⟶t') = ⊥-elim (V¬⟨send⟩ v' c)
--- ⟨send⟩¬⟶ v (v' ·₂ c) (app v'') = ⊥-elim (V¬⟨send⟩ v'' c)
--- ⟨send⟩¬⟶ v (v' ·₂ c) (cong-·₁ t⟶t') = ⊥-elim (V¬⟶ v' t⟶t')
--- ⟨send⟩¬⟶ v (v' ·₂ c) (cong-·₂ v'' t⟶t') = ⟨send⟩¬⟶ v c t⟶t'
--- ⟨send⟩¬⟶ v (send c) (cong-send t⟶t') = ⟨send⟩¬⟶ v c t⟶t'
--- ⟨send⟩¬⟶ v (suc c) (cong-suc t⟶t') = ⟨send⟩¬⟶ v c t⟶t'
--- ⟨send⟩¬⟶ v (case s t c) (β-suc v') = ⊥-elim (V¬⟨send⟩ (suc v') c)
--- ⟨send⟩¬⟶ v (case s t c) (cong-case t⟶t') = ⟨send⟩¬⟶ v c t⟶t'
+sendInPEC¬⟶ : {u : Tm Γ (α ➡ β) α} {t t' : Tm Γ ε γ}
+  → Val u
+  → send u InPEC t
+  → ¬ (t ⟶ t')
+sendInPEC¬⟶ v ⟨⟩ (cong-send t⟶t') = V¬⟶ v t⟶t'
+sendInPEC¬⟶ v (c ·₁ u) (cong-·₁ t⟶t') = sendInPEC¬⟶ v c t⟶t'
+sendInPEC¬⟶ v (c ·₁ u) (cong-·₂ v' t⟶t') = ⊥-elim (V¬sendInPEC v' c)
+sendInPEC¬⟶ v (v' ·₂ c) (app v'') = ⊥-elim (V¬sendInPEC v'' c)
+sendInPEC¬⟶ v (v' ·₂ c) (cong-·₁ t⟶t') = ⊥-elim (V¬⟶ v' t⟶t')
+sendInPEC¬⟶ v (v' ·₂ c) (cong-·₂ v'' t⟶t') = sendInPEC¬⟶ v c t⟶t'
+sendInPEC¬⟶ v (suc c) (cong-suc t⟶t') = sendInPEC¬⟶ v c t⟶t'
+sendInPEC¬⟶ v (case c z s) (case-suc v') = ⊥-elim (V¬sendInPEC (suc v') c)
+sendInPEC¬⟶ v (case c z s) (cong-case t⟶t') = sendInPEC¬⟶ v c t⟶t'
+sendInPEC¬⟶ v (send c) (cong-send t⟶t') = sendInPEC¬⟶ v c t⟶t'
 
--- ⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
--- ⟶-deterministic (app {t = t} v) (app v') = cong (λ u → t [ coe u ]) (V-unique v v')
--- ⟶-deterministic (β-run₁ v) (β-run₁ v') = cong coe (V-unique v v')
--- ⟶-deterministic (β-run₂ c v) (β-run₂ c' v') = {!   !}
--- ⟶-deterministic β-zero β-zero = refl
--- ⟶-deterministic (β-suc {u = t} v) (β-suc v') = cong (λ u → t [ coe u ]) (V-unique v v')
--- ⟶-deterministic (cong-·₁ t⟶s) (cong-·₁ t⟶u) = cong (_· _) (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (cong-·₂ _ t⟶s) (cong-·₂ _ t⟶u) = cong (_ ·_) (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (cong-send t⟶s) (cong-send t⟶u) = cong send (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (cong-run {u = u} t⟶s) (cong-run t⟶u) = cong (flip run u) (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (cong-suc t⟶s) (cong-suc t⟶u) = cong suc (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (cong-case t⟶s) (cong-case t⟶u) = cong (case _ _) (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (app v) (cong-·₂ _ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
--- ⟶-deterministic (cong-·₂ _ t⟶s) (app v) = ⊥-elim (V¬⟶ v t⟶s)
--- ⟶-deterministic (β-run₁ v) (β-run₂ c _) = ⊥-elim (V¬⟨send⟩ v c)
--- ⟶-deterministic (β-run₂ c _) (β-run₁ v) = ⊥-elim (V¬⟨send⟩ v c)
--- ⟶-deterministic (β-run₁ v) (cong-run t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
--- ⟶-deterministic (cong-run t⟶s) (β-run₁ v) = ⊥-elim (V¬⟶ v t⟶s)
--- ⟶-deterministic (β-run₂ c v) (cong-run t⟶u) = ⊥-elim (⟨send⟩¬⟶ v c t⟶u)
--- ⟶-deterministic (cong-run t⟶s) (β-run₂ c v) = ⊥-elim (⟨send⟩¬⟶ v c t⟶s)
--- ⟶-deterministic (β-suc v) (cong-case t⟶u) = ⊥-elim (V¬⟶ (suc v) t⟶u)
--- ⟶-deterministic (cong-case t⟶s) (β-suc v) = ⊥-elim (V¬⟶ (suc v) t⟶s)
--- ⟶-deterministic (cong-·₁ t⟶s) (cong-·₂ v t⟶u) = ⊥-elim (V¬⟶ v t⟶s)
--- ⟶-deterministic (cong-·₂ v t⟶s) (cong-·₁ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
+sendInPEC-unique-ty : {t : Tm Γ ε α}
+  → {u : Tm Γ (γ ➡ β) γ} (c : send u InPEC t) (v : Val u)
+  → {u' : Tm Γ (δ ➡ β) δ} (c' : send u' InPEC t) (v' : Val u')
+  → γ ≡ δ
+sendInPEC-unique-ty ⟨⟩ vu ⟨⟩ vu' = refl
+sendInPEC-unique-ty ⟨⟩ vu (send c') vu' = ⊥-elim (V¬sendInPEC vu c')
+sendInPEC-unique-ty (c ·₁ u) vu (c' ·₁ .u) vu' rewrite sendInPEC-unique-ty c vu c' vu' = refl
+sendInPEC-unique-ty (c ·₁ u) vu (v ·₂ c') vu' = ⊥-elim (V¬sendInPEC v c)
+sendInPEC-unique-ty (v ·₂ c) vu (c' ·₁ _) vu' = ⊥-elim (V¬sendInPEC v c')
+sendInPEC-unique-ty (v ·₂ c) vu (v' ·₂ c') vu' rewrite sendInPEC-unique-ty c vu c' vu' = refl
+sendInPEC-unique-ty (suc c) vu (suc c') vu' rewrite sendInPEC-unique-ty c vu c' vu' = refl
+sendInPEC-unique-ty (case c z s) vu (case c' .z .s) vu' rewrite sendInPEC-unique-ty c vu c' vu' = refl
+sendInPEC-unique-ty (send c) vu ⟨⟩ vu' = ⊥-elim (V¬sendInPEC vu' c)
+sendInPEC-unique-ty (send c) vu (send c') vu' rewrite sendInPEC-unique-ty c vu c' vu' = refl
+
+sendInPEC-unique-tm : {t : Tm Γ ε α}
+  → {u : Tm Γ (γ ➡ β) γ} (c : send u InPEC t) (v : Val u)
+  → {u' : Tm Γ (γ ➡ β) γ} (c' : send u' InPEC t) (v' : Val u')
+  → u ≡ u'
+sendInPEC-unique-tm ⟨⟩ vu ⟨⟩ vu' = refl
+sendInPEC-unique-tm ⟨⟩ vu (send c') vu' = ⊥-elim (V¬sendInPEC vu c')
+sendInPEC-unique-tm (c ·₁ u) vu (c' ·₁ .u) vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
+sendInPEC-unique-tm (c ·₁ u) vu (v ·₂ c') vu' = ⊥-elim (V¬sendInPEC v c)
+sendInPEC-unique-tm (v ·₂ c) vu (c' ·₁ _) vu' = ⊥-elim (V¬sendInPEC v c')
+sendInPEC-unique-tm (v ·₂ c) vu (v' ·₂ c') vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
+sendInPEC-unique-tm (suc c) vu (suc c') vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
+sendInPEC-unique-tm (case c z s) vu (case c' .z .s) vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
+sendInPEC-unique-tm (send c) vu ⟨⟩ vu' = ⊥-elim (V¬sendInPEC vu' c)
+sendInPEC-unique-tm (send c) vu (send c') vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
+
+sendInPEC-unique : {t : Tm Γ ε α} {u : Tm Γ (γ ➡ β) γ}
+  → (c c' : send u InPEC t) (v : Val u)
+  → c ≡ c'
+sendInPEC-unique ⟨⟩ ⟨⟩ vu = refl
+sendInPEC-unique ⟨⟩ (send c') vu = ⊥-elim (V¬sendInPEC vu c')
+sendInPEC-unique (c ·₁ u) (c' ·₁ .u) vu rewrite sendInPEC-unique c c' vu = refl
+sendInPEC-unique (c ·₁ u) (v ·₂ c') vu = ⊥-elim (V¬sendInPEC v c)
+sendInPEC-unique (v ·₂ c) (c' ·₁ _) vu = ⊥-elim (V¬sendInPEC v c')
+sendInPEC-unique (v ·₂ c) (v' ·₂ c') vu rewrite V-unique v v' | sendInPEC-unique c c' vu = refl
+sendInPEC-unique (suc c) (suc c') vu rewrite sendInPEC-unique c c' vu = refl
+sendInPEC-unique (case c z s) (case c' .z .s) vu rewrite sendInPEC-unique c c' vu = refl
+sendInPEC-unique (send c) ⟨⟩ vu = ⊥-elim (V¬sendInPEC vu c)
+sendInPEC-unique (send c) (send c') vu rewrite sendInPEC-unique c c' vu = refl
+
+⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
+⟶-deterministic (app v) (app v') rewrite V-unique v v' = refl
+⟶-deterministic (run-value v) (run-value v') rewrite V-unique v v' = refl
+⟶-deterministic (run-send c v) (run-send c' v')
+  with refl ← sendInPEC-unique-ty c v c' v'
+  with refl ← sendInPEC-unique-tm c v c' v'
+  with refl ← V-unique v v'
+  with refl ← sendInPEC-unique c c' v
+  = refl
+⟶-deterministic case-zero case-zero = refl
+⟶-deterministic (case-suc v) (case-suc v') rewrite V-unique v v' = refl
+⟶-deterministic (cong-·₁ t⟶s) (cong-·₁ t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-·₂ _ t⟶s) (cong-·₂ _ t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-send t⟶s) (cong-send t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-run t⟶s) (cong-run t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-suc t⟶s) (cong-suc t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-case t⟶s) (cong-case t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic unroll unroll = refl
+⟶-deterministic (app v) (cong-·₂ _ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
+⟶-deterministic (cong-·₂ _ t⟶s) (app v) = ⊥-elim (V¬⟶ v t⟶s)
+⟶-deterministic (run-value v) (run-send c _) = ⊥-elim (V¬sendInPEC v c)
+⟶-deterministic (run-send c _) (run-value v) = ⊥-elim (V¬sendInPEC v c)
+⟶-deterministic (run-value v) (cong-run t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
+⟶-deterministic (cong-run t⟶s) (run-value v) = ⊥-elim (V¬⟶ v t⟶s)
+⟶-deterministic (run-send c v) (cong-run t⟶u) = ⊥-elim (sendInPEC¬⟶ v c t⟶u)
+⟶-deterministic (cong-run t⟶s) (run-send c v) = ⊥-elim (sendInPEC¬⟶ v c t⟶s)
+⟶-deterministic (case-suc v) (cong-case t⟶u) = ⊥-elim (V¬⟶ (suc v) t⟶u)
+⟶-deterministic (cong-case t⟶s) (case-suc v) = ⊥-elim (V¬⟶ (suc v) t⟶s)
+⟶-deterministic (cong-·₁ t⟶s) (cong-·₂ v t⟶u) = ⊥-elim (V¬⟶ v t⟶s)
+⟶-deterministic (cong-·₂ v t⟶s) (cong-·₁ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
 
 --------------------------------------------------------------------------------
 -- Evaluation
@@ -369,41 +419,6 @@ _ : let open ⟶*-Reasoning in
       ⟶⟨ app (suc zero) ⟩
         run (suc (suc zero)) (var# 0 · (var# 0 · var# 1))
       ⟶⟨ run-value (suc (suc zero)) ⟩
-        suc (suc zero)
-      ∎)
-      (just (suc (suc zero)))
-_ = refl
-
-plus : Tm ∙ ι (`ℕ ⇒ `ℕ ⇒ `ℕ ! ι ! ι)
-plus = μ ƛ ƛ case (var# 1) (var# 0) (suc (var# 3 · var# 0 · var# 1))
-
-_ : let open ⟶*-Reasoning in
-    eval 10 (plus · suc zero · suc zero) ≡ steps
-      (begin
-        plus · suc zero · suc zero
-      ⟶⟨ cong-·₁ (cong-·₁ unroll) ⟩
-        (ƛ ƛ case (var# 1) (var# 0) (suc ((ƛ (↑ ↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
-          · suc zero
-          · suc zero
-      ⟶⟨ cong-·₁ (app (suc zero)) ⟩
-        (ƛ case (suc zero) (var# 0) (suc ((ƛ (↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
-          · suc zero
-      ⟶⟨ app (suc zero) ⟩
-        case (suc zero) (suc zero) (suc ((ƛ ↑ ↑ plus · var# 0) · var# 0 · suc zero))
-      ⟶⟨ case-suc zero ⟩
-        suc ((ƛ ↑ plus · var# 0) · zero · suc zero)
-      ⟶⟨ cong-suc (cong-·₁ (app zero)) ⟩
-        suc (plus · zero · suc zero)
-      ⟶⟨ cong-suc (cong-·₁ (cong-·₁ unroll)) ⟩
-        suc (
-          (ƛ ƛ case (var# 1) (var# 0) (suc ((ƛ (↑ ↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
-          · zero
-          · suc zero)
-      ⟶⟨ cong-suc (cong-·₁ (app zero)) ⟩
-        suc ((ƛ case zero (var# 0) (suc ((ƛ (↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1))) · suc zero)
-      ⟶⟨ cong-suc (app (suc zero)) ⟩
-        suc (case zero (suc zero) (suc ((ƛ ↑ ↑ plus · var# 0) · var# 0 · suc zero)))
-      ⟶⟨ cong-suc case-zero ⟩
         suc (suc zero)
       ∎)
       (just (suc (suc zero)))

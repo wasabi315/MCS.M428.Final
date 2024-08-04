@@ -36,7 +36,7 @@ data Ctx : Set where
 
 variable
   Γ Δ : Ctx
-  α β γ αₕ βₕ : Ty
+  α β γ δ αₕ βₕ : Ty
   ε ε' ε'' εₕ : Eff
 
 data _∋_ : Ctx → Ty → Set where
@@ -269,30 +269,87 @@ V-unique (ƛ t) (ƛ .t) = refl
 V-unique zero zero = refl
 V-unique (suc v) (suc v') = cong suc (V-unique v v')
 
--- ⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
--- ⟶-deterministic (app {t = t} v) (app v') rewrite V-unique v v' = refl
--- ⟶-deterministic (delimit-val v) (delimit-val v') rewrite V-unique v v' = refl
--- ⟶-deterministic (delimit-grab c eq) (delimit-grab c' eq') = {!   !}
--- ⟶-deterministic case-zero case-zero = refl
--- ⟶-deterministic (case-suc v) (case-suc v') rewrite V-unique v v' = refl
--- ⟶-deterministic (cong-suc t⟶s) (cong-suc t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
--- ⟶-deterministic (cong-·₁ t⟶s) (cong-·₁ t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
--- ⟶-deterministic (cong-·₂ _ t⟶s) (cong-·₂ _ t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
--- ⟶-deterministic (cong-delimit t⟶s) (cong-delimit t⟶u) = cong delimit (⟶-deterministic t⟶s t⟶u)
--- ⟶-deterministic (cong-case t⟶s) (cong-case t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
--- ⟶-deterministic unroll unroll = refl
--- ⟶-deterministic (app v) (cong-·₂ _ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
--- ⟶-deterministic (cong-·₂ _ t⟶s) (app v) = ⊥-elim (V¬⟶ v t⟶s)
--- ⟶-deterministic (delimit-val v) (cong-delimit t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
--- ⟶-deterministic (cong-delimit t⟶s) (delimit-val v) = ⊥-elim (V¬⟶ v t⟶s)
--- ⟶-deterministic (delimit-val v) (delimit-grab c refl) = {!   !} -- ⊥-elim (V¬⟨grab⟩ v c)
--- ⟶-deterministic (delimit-grab c refl) (delimit-val v) = {!   !} -- ⊥-elim (V¬⟨grab⟩ v c)
--- ⟶-deterministic (delimit-grab c refl) (cong-delimit t⟶u) = {!   !} -- ⊥-elim (⟨grab⟩¬⟶ c t⟶u)
--- ⟶-deterministic (cong-delimit t⟶s) (delimit-grab c refl) = {!   !} -- ⊥-elim (⟨grab⟩¬⟶ c t⟶s)
--- ⟶-deterministic (case-suc v) (cong-case t⟶u) = ⊥-elim (V¬⟶ (suc v) t⟶u)
--- ⟶-deterministic (cong-case t⟶s) (case-suc v) = ⊥-elim (V¬⟶ (suc v) t⟶s)
--- ⟶-deterministic (cong-·₁ t⟶s) (cong-·₂ v t⟶u) = ⊥-elim (V¬⟶ v t⟶s)
--- ⟶-deterministic (cong-·₂ v t⟶s) (cong-·₁ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
+V¬grabInPEC : {u : Tm (Γ , α ⇒ β ! ε) ε β} {v : Tm Γ (ε , β) γ}
+  → Val v
+  → ¬ (grab u InPEC v)
+V¬grabInPEC (suc v) (suc c) = V¬grabInPEC v c
+
+grabInPEC¬⟶ : {u : Tm (Γ , α ⇒ β ! ε) ε β} {t t' : Tm Γ (ε , β) γ}
+  → grab u InPEC t
+  → ¬ (t ⟶ t')
+grabInPEC¬⟶ (c ·₁ u) (cong-·₁ t⟶t') = grabInPEC¬⟶ c t⟶t'
+grabInPEC¬⟶ (c ·₁ u) (cong-·₂ v t⟶t') = V¬grabInPEC v c
+grabInPEC¬⟶ (v ·₂ c) (app v') = V¬grabInPEC v' c
+grabInPEC¬⟶ (v ·₂ c) (cong-·₁ t⟶t') = V¬⟶ v t⟶t'
+grabInPEC¬⟶ (v ·₂ c) (cong-·₂ v' t⟶t') = grabInPEC¬⟶ c t⟶t'
+grabInPEC¬⟶ (suc c) (cong-suc t⟶t') = grabInPEC¬⟶ c t⟶t'
+grabInPEC¬⟶ (case c z s) (case-suc v) = V¬grabInPEC (suc v) c
+grabInPEC¬⟶ (case c z s) (cong-case t⟶t') = grabInPEC¬⟶ c t⟶t'
+
+grabInPEC-unique-ty : {t : Tm Γ (ε , α) β}
+  → {u : Tm (Γ , γ ⇒ α ! ε) ε α} (c : grab u InPEC t)
+  → {u' : Tm (Γ , δ ⇒ α ! ε) ε α} (c' : grab u' InPEC t)
+  → γ ≡ δ
+grabInPEC-unique-ty ⟨⟩ ⟨⟩ = refl
+grabInPEC-unique-ty (c ·₁ u) (c' ·₁ .u) rewrite grabInPEC-unique-ty c c' = refl
+grabInPEC-unique-ty (c ·₁ u) (v ·₂ c') = ⊥-elim (V¬grabInPEC v c)
+grabInPEC-unique-ty (v ·₂ c) (c' ·₁ _) = ⊥-elim (V¬grabInPEC v c')
+grabInPEC-unique-ty (v ·₂ c) (v' ·₂ c') rewrite grabInPEC-unique-ty c c' = refl
+grabInPEC-unique-ty (suc c) (suc c') rewrite grabInPEC-unique-ty c c' = refl
+grabInPEC-unique-ty (case c z s) (case c' .z .s) rewrite grabInPEC-unique-ty c c' = refl
+
+grabInPEC-unique-tm : {t : Tm Γ (ε , α) β}
+  → {u : Tm (Γ , γ ⇒ α ! ε) ε α} (c : grab u InPEC t)
+  → {u' : Tm (Γ , γ ⇒ α ! ε) ε α} (c' : grab u' InPEC t)
+  → u ≡ u'
+grabInPEC-unique-tm ⟨⟩ ⟨⟩ = refl
+grabInPEC-unique-tm (c ·₁ u) (c' ·₁ .u) rewrite grabInPEC-unique-tm c c' = refl
+grabInPEC-unique-tm (c ·₁ u) (v ·₂ c') = ⊥-elim (V¬grabInPEC v c)
+grabInPEC-unique-tm (v ·₂ c) (c' ·₁ _) = ⊥-elim (V¬grabInPEC v c')
+grabInPEC-unique-tm (v ·₂ c) (v' ·₂ c') rewrite grabInPEC-unique-tm c c' = refl
+grabInPEC-unique-tm (suc c) (suc c') rewrite grabInPEC-unique-tm c c' = refl
+grabInPEC-unique-tm (case c z s) (case c' .z .s) rewrite grabInPEC-unique-tm c c' = refl
+
+grabInPEC-unique : {t : Tm Γ (ε , α) β} {u : Tm (Γ , γ ⇒ α ! ε) ε α}
+  → (c c' : grab u InPEC t)
+  → c ≡ c'
+grabInPEC-unique ⟨⟩ ⟨⟩ = refl
+grabInPEC-unique (c ·₁ u) (c' ·₁ .u) rewrite grabInPEC-unique c c' = refl
+grabInPEC-unique (c ·₁ u) (v ·₂ c') = ⊥-elim (V¬grabInPEC v c)
+grabInPEC-unique (v ·₂ c) (c' ·₁ _) = ⊥-elim (V¬grabInPEC v c')
+grabInPEC-unique (v ·₂ c) (v' ·₂ c') rewrite grabInPEC-unique c c' | V-unique v v' = refl
+grabInPEC-unique (suc c) (suc c') rewrite grabInPEC-unique c c' = refl
+grabInPEC-unique (case c z s) (case c' .z .s) rewrite grabInPEC-unique c c' = refl
+
+⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
+⟶-deterministic (app {t = t} v) (app v') rewrite V-unique v v' = refl
+⟶-deterministic (delimit-val v) (delimit-val v') rewrite V-unique v v' = refl
+-- Is there a better way to do this?
+⟶-deterministic (delimit-grab c) (delimit-grab c')
+  with refl ← grabInPEC-unique-ty c c'
+  with refl ← grabInPEC-unique-tm c c'
+  with refl ← grabInPEC-unique c c'
+  = refl
+⟶-deterministic case-zero case-zero = refl
+⟶-deterministic (case-suc v) (case-suc v') rewrite V-unique v v' = refl
+⟶-deterministic (cong-suc t⟶s) (cong-suc t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-·₁ t⟶s) (cong-·₁ t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-·₂ _ t⟶s) (cong-·₂ _ t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic (cong-delimit t⟶s) (cong-delimit t⟶u) = cong delimit (⟶-deterministic t⟶s t⟶u)
+⟶-deterministic (cong-case t⟶s) (cong-case t⟶u) rewrite ⟶-deterministic t⟶s t⟶u = refl
+⟶-deterministic unroll unroll = refl
+⟶-deterministic (app v) (cong-·₂ _ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
+⟶-deterministic (cong-·₂ _ t⟶s) (app v) = ⊥-elim (V¬⟶ v t⟶s)
+⟶-deterministic (delimit-val v) (cong-delimit t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
+⟶-deterministic (cong-delimit t⟶s) (delimit-val v) = ⊥-elim (V¬⟶ v t⟶s)
+⟶-deterministic (delimit-val v) (delimit-grab c) = ⊥-elim (V¬grabInPEC v c)
+⟶-deterministic (delimit-grab c) (delimit-val v) = ⊥-elim (V¬grabInPEC v c)
+⟶-deterministic (delimit-grab c) (cong-delimit t⟶u) = ⊥-elim (grabInPEC¬⟶ c t⟶u)
+⟶-deterministic (cong-delimit t⟶s) (delimit-grab c) = ⊥-elim (grabInPEC¬⟶ c t⟶s)
+⟶-deterministic (case-suc v) (cong-case t⟶u) = ⊥-elim (V¬⟶ (suc v) t⟶u)
+⟶-deterministic (cong-case t⟶s) (case-suc v) = ⊥-elim (V¬⟶ (suc v) t⟶s)
+⟶-deterministic (cong-·₁ t⟶s) (cong-·₂ v t⟶u) = ⊥-elim (V¬⟶ v t⟶s)
+⟶-deterministic (cong-·₂ v t⟶s) (cong-·₁ t⟶u) = ⊥-elim (V¬⟶ v t⟶u)
 
 --------------------------------------------------------------------------------
 -- Evaluation
@@ -339,34 +396,35 @@ _ = refl
 plus : Tm ∙ ι (`ℕ ⇒ `ℕ ⇒ `ℕ ! ι ! ι)
 plus = μ ƛ ƛ case (var# 1) (var# 0) (suc (var# 3 · var# 0 · var# 1))
 
-_ : let open ⟶*-Reasoning in
-    eval 10 (plus · suc zero · suc zero) ≡ steps
-      (begin
-        plus · suc zero · suc zero
-      ⟶⟨ cong-·₁ (cong-·₁ unroll) ⟩
-        (ƛ ƛ case (var# 1) (var# 0) (suc ((ƛ (↑ ↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
-          · suc zero
-          · suc zero
-      ⟶⟨ cong-·₁ (app (suc zero)) ⟩
-        (ƛ case (suc zero) (var# 0) (suc ((ƛ (↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
-          · suc zero
-      ⟶⟨ app (suc zero) ⟩
-        case (suc zero) (suc zero) (suc ((ƛ ↑ ↑ plus · var# 0) · var# 0 · suc zero))
-      ⟶⟨ case-suc zero ⟩
-        suc ((ƛ ↑ plus · var# 0) · zero · suc zero)
-      ⟶⟨ cong-suc (cong-·₁ (app zero)) ⟩
-        suc (plus · zero · suc zero)
-      ⟶⟨ cong-suc (cong-·₁ (cong-·₁ unroll)) ⟩
-        suc (
-          (ƛ ƛ case (var# 1) (var# 0) (suc ((ƛ (↑ ↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
-          · zero
-          · suc zero)
-      ⟶⟨ cong-suc (cong-·₁ (app zero)) ⟩
-        suc ((ƛ case zero (var# 0) (suc ((ƛ (↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1))) · suc zero)
-      ⟶⟨ cong-suc (app (suc zero)) ⟩
-        suc (case zero (suc zero) (suc ((ƛ ↑ ↑ plus · var# 0) · var# 0 · suc zero)))
-      ⟶⟨ cong-suc case-zero ⟩
-        suc (suc zero)
-      ∎)
-      (just (suc (suc zero)))
-_ = refl
+-- Heavy!
+-- _ : let open ⟶*-Reasoning in
+--     eval 10 (plus · suc zero · suc zero) ≡ steps
+--       (begin
+--         plus · suc zero · suc zero
+--       ⟶⟨ cong-·₁ (cong-·₁ unroll) ⟩
+--         (ƛ ƛ case (var# 1) (var# 0) (suc ((ƛ (↑ ↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
+--           · suc zero
+--           · suc zero
+--       ⟶⟨ cong-·₁ (app (suc zero)) ⟩
+--         (ƛ case (suc zero) (var# 0) (suc ((ƛ (↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
+--           · suc zero
+--       ⟶⟨ app (suc zero) ⟩
+--         case (suc zero) (suc zero) (suc ((ƛ ↑ ↑ plus · var# 0) · var# 0 · suc zero))
+--       ⟶⟨ case-suc zero ⟩
+--         suc ((ƛ ↑ plus · var# 0) · zero · suc zero)
+--       ⟶⟨ cong-suc (cong-·₁ (app zero)) ⟩
+--         suc (plus · zero · suc zero)
+--       ⟶⟨ cong-suc (cong-·₁ (cong-·₁ unroll)) ⟩
+--         suc (
+--           (ƛ ƛ case (var# 1) (var# 0) (suc ((ƛ (↑ ↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1)))
+--           · zero
+--           · suc zero)
+--       ⟶⟨ cong-suc (cong-·₁ (app zero)) ⟩
+--         suc ((ƛ case zero (var# 0) (suc ((ƛ (↑ ↑ ↑ plus) · var# 0) · var# 0 · var# 1))) · suc zero)
+--       ⟶⟨ cong-suc (app (suc zero)) ⟩
+--         suc (case zero (suc zero) (suc ((ƛ ↑ ↑ plus · var# 0) · var# 0 · suc zero)))
+--       ⟶⟨ cong-suc case-zero ⟩
+--         suc (suc zero)
+--       ∎)
+--       (just (suc (suc zero)))
+-- _ = refl
