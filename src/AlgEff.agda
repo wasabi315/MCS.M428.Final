@@ -37,7 +37,7 @@ module M (Σ : Sig) where
   infixr 7 _⇒_!_
   infixl 7 _·_ _!_
   infixl 6 _[_] _⟨_⟩
-  infixl 5 _,_
+  infixl 5 _,_ _,#_
   infix  5 ƛ_ μ_
   infix  4 _∋_
   infix  2 _⟶_ _⟶*_
@@ -497,20 +497,26 @@ module M (Σ : Sig) where
 open Sig
 
 data ExOp : Set where
-  op1 : ExOp
+  op1 op2 : ExOp
 
 exSig : Sig
 Op exSig = ExOp
 decEq exSig op1 op1 = yes refl
+decEq exSig op1 op2 = no λ ()
+decEq exSig op2 op1 = no λ ()
+decEq exSig op2 op2 = yes refl
 Dom exSig op1 = `ℕ
 Cod exSig op1 = `ℕ
+Dom exSig op2 = `ℕ
+Cod exSig op2 = `ℕ
 
 open M exSig
 
--- {return x. x} ⊎ {op1 x k. k (k x)}
-exHandler : Handler ∙ (ι ,# op1) ι `ℕ `ℕ
+-- {return x. x} ⊎ {op1 x k. k (k x)} ⊎ {op2 x k. 0}
+exHandler : Handler ∙ (ι ,# op1 ,# op2) ι `ℕ `ℕ
 valh exHandler = var# 0
-effh exHandler zero = var# 0 · (var# 0 · var# 1)
+effh exHandler (suc zero) = var# 0 · (var# 0 · var# 1)
+effh exHandler zero = zero
 
 -- handle (suc (op1 0)) exHandler
 ex : Tm ∙ ι `ℕ
@@ -521,7 +527,7 @@ _ : let open ⟶*-Reasoning in
       (begin
         handle (suc (op1 !# zero)) exHandler
       ⟶⟨ handle-! (suc ⟨⟩) zero ⟩
-        effh exHandler zero
+        effh exHandler (suc zero)
           [ ƛ handle (suc (var# 0)) (↑H ↑H exHandler) ]
           [ zero ]
       ≡⟨⟩
@@ -537,4 +543,10 @@ _ : let open ⟶*-Reasoning in
         suc (suc zero)
       ∎)
       (just (suc (suc zero)))
+_ = refl
+
+_ : let open ⟶*-Reasoning in
+    -- handle ((λ x. op2 x) · op1 1) exHandler ⟶* 0
+    eval 10 (handle ((ƛ op2 !# var# 0) · (op1 !# (suc zero))) exHandler) ≡
+    steps _ (just zero)
 _ = refl
