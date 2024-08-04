@@ -132,6 +132,10 @@ module M (Σ : Sig) where
   _!#_ : ∀ op {op∈ₑε : True (ε ∋ₑ? op)} → Tm Γ ε (Dom' op) → Tm Γ ε (Cod' op)
   _!#_ _ {op∈ₑε} = _!_ (toWitness op∈ₑε)
 
+  effh# : ∀ (h : Handler Γ ε ε' α β) op {op∈ₑε : True (ε ∋ₑ? op)}
+    → Tm (Γ , Dom' op , Cod' op ⇒ β ! ε') ε' β
+  effh# h _ {op∈ₑε} = effh h (toWitness op∈ₑε)
+
 --------------------------------------------------------------------------------
 -- Renaming and Substitution
 
@@ -527,7 +531,7 @@ _ : let open ⟶*-Reasoning in
       (begin
         handle (suc (op1 !# zero)) exHandler
       ⟶⟨ handle-! (suc ⟨⟩) zero ⟩
-        effh exHandler (suc zero)
+        effh# exHandler op1
           [ ƛ handle (suc (var# 0)) (↑H ↑H exHandler) ]
           [ zero ]
       ≡⟨⟩
