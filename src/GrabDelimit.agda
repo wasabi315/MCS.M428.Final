@@ -196,7 +196,7 @@ data _⟶_ : Tm Γ ε α → Tm Γ ε α → Set where
   unroll : {t : Tm (Γ , α ⇒ β ! ε) ε (α ⇒ β ! ε)}
     → μ t ⟶ t [ ƛ (↑ (μ t)) · var zero ]
 
-  cong-·₁ : ∀ {t t' : Tm Γ ε (α ⇒ β ! ε)}
+  cong-·₁ : {t t' : Tm Γ ε (α ⇒ β ! ε)}
     → t ⟶ t'
     → ∀ {u} → t · u ⟶ t' · u
 

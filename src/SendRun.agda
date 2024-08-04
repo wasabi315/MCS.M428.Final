@@ -186,12 +186,13 @@ data _⟶_ : Tm Γ ε α → Tm Γ ε α → Set where
     → (v : Val u)
     → (ƛ t) · u ⟶ t [ coe v ]
 
-  run-value : ∀ {t} (v : Val t) {u : Tm (Γ , α , β ⇒ γ ! ε) ε γ}
-    → run t u ⟶ coe v
+  run-value : ∀ {t} (v : Val t) {h : Tm (Γ , α , β ⇒ γ ! ε) ε γ}
+    → run t h ⟶ coe v
 
-  run-send : ∀ {t} {u} {h : Tm (Γ , α , β ⇒ γ ! ε) ε γ}
+  run-send : ∀ {t u}
     → (c : send u InPEC t)
     → (v : Val u)
+    → {h : Tm (Γ , α , β ⇒ γ ! ε) ε γ}
     → run t h ⟶ h [ ƛ run (↑PEC ↑PEC c ⟨ var# 0 ⟩) (ren (ext (ext (suc ∘′ suc))) h) ] [ coe v ]
 
   case-zero : ∀ {z : Tm Γ ε α} {s}
