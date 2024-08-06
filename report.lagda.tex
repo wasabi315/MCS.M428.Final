@@ -80,20 +80,13 @@ Based on PLFA\cite{plfa22.08}. Intrincically typed, De Bruijn representation.
 
 \section{grab/delimit}
 
-\begin{code}[hide]%
-\>[0]\AgdaKeyword{open}\AgdaSpace{}%
-\AgdaKeyword{import}\AgdaSpace{}%
-\AgdaModule{Data.Nat}\<%
+\begin{code}[hide]
+open import Data.Nat
 \end{code}
 
-\begin{code}%
-\>[0]\AgdaFunction{four}\AgdaSpace{}%
-\AgdaSymbol{:}\AgdaSpace{}%
-\AgdaDatatype{ℕ}\<%
-\\
-\>[0]\AgdaFunction{four}\AgdaSpace{}%
-\AgdaSymbol{=}\AgdaSpace{}%
-\AgdaNumber{4}\<%
+\begin{code}
+four : ℕ
+four = 4
 \end{code}
 
 \section{send/run}

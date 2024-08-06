@@ -56,6 +56,8 @@ data Tm : Ctx → Eff → Ty → Set where
   send : Tm Γ (α ⇾ β) α → Tm Γ (α ⇾ β) β
   run : Tm Γ (α ⇾ β) γ → Tm (Γ , α , β ⇒ γ ! ε) ε γ → Tm Γ ε γ
 
+-- Shorthand notation
+
 length : Ctx → ℕ
 length ∙ = 0
 length (Γ , _) = suc (length Γ)

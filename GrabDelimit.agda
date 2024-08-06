@@ -55,6 +55,8 @@ data Tm : Ctx → Eff → Ty → Set where
   delimit : Tm Γ (ε , α) α → Tm Γ ε α
   grab : Tm (Γ , α ⇒ β ! ε) ε β → Tm Γ (ε , β) α
 
+-- Shorthand notation
+
 length : Ctx → ℕ
 length ∙ = 0
 length (Γ , _) = suc (length Γ)
@@ -333,7 +335,7 @@ grabInPEC-unique c c'
   = hrefl
 
 ⟶-deterministic : {t s u : Tm Γ ε α} → t ⟶ s → t ⟶ u → s ≡ u
-⟶-deterministic (app {t = t} v) (app v') rewrite V-unique v v' = refl
+⟶-deterministic (app v) (app v') rewrite V-unique v v' = refl
 ⟶-deterministic (delimit-val v) (delimit-val v') rewrite V-unique v v' = refl
 ⟶-deterministic (delimit-grab c) (delimit-grab c')
   with refl ← grabInPEC-unique-ty c c'

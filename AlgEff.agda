@@ -107,6 +107,8 @@ module M (Σ : Sig) where
 
   open Handler public
 
+  -- Shorthand notations
+
   length : Ctx → ℕ
   length ∙ = 0
   length (Γ , _) = suc (length Γ)
