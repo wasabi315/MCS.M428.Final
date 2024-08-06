@@ -403,6 +403,7 @@ _ : let open ⟶*-Reasoning in
       (just (suc (suc zero)))
 _ = refl
 
+-- μ f. λ m n. case m of { 0 → n; suc m' → f m' n }
 plus : Tm ∙ ι (`ℕ ⇒ `ℕ ⇒ `ℕ ! ι ! ι)
 plus = μ ƛ ƛ case (var# 1) (var# 0) (suc (var# 3 · var# 0 · var# 1))
 

@@ -11,7 +11,7 @@ open import Relation.Nullary.Decidable using ( True; toWitness )
 
 infixr 8 ↑_ ↑Val_ ↑PEC_
 infixr 7 _⇒_!_
-infixl 7 _·_
+infixl 7 _·_ _⇾_
 infixl 6 _[_] _⟨_⟩
 infixl 5 _,_
 infix  5 ƛ_ μ_
@@ -30,7 +30,7 @@ data Ty where
 
 data Eff where
   ι : Eff
-  _➡_ : Ty → Ty → Eff
+  _⇾_ : Ty → Ty → Eff
 
 data Ctx : Set where
   ∙ : Ctx
@@ -53,8 +53,8 @@ data Tm : Ctx → Eff → Ty → Set where
   suc : Tm Γ ε `ℕ → Tm Γ ε `ℕ
   case : Tm Γ ε `ℕ → Tm Γ ε α → Tm (Γ , `ℕ) ε α → Tm Γ ε α
   μ_ : Tm (Γ , α ⇒ β ! ε) ε (α ⇒ β ! ε) → Tm Γ ε (α ⇒ β ! ε)
-  send : Tm Γ (α ➡ β) α → Tm Γ (α ➡ β) β
-  run : Tm Γ (α ➡ β) γ → Tm (Γ , α , β ⇒ γ ! ε) ε γ → Tm Γ ε γ
+  send : Tm Γ (α ⇾ β) α → Tm Γ (α ⇾ β) β
+  run : Tm Γ (α ⇾ β) γ → Tm (Γ , α , β ⇒ γ ! ε) ε γ → Tm Γ ε γ
 
 length : Ctx → ℕ
 length ∙ = 0
@@ -146,7 +146,7 @@ data _InPEC_ (h : Tm Γ εₕ αₕ) : Tm Γ ε α → Set where
   _·₂_ : ∀ {t : Tm Γ ε (α ⇒ β ! ε)} {u} → Val t → h InPEC u → h InPEC (t · u)
   suc : ∀ {t : Tm Γ ε `ℕ} → h InPEC t → h InPEC (suc t)
   case : ∀ {n} (c : h InPEC n) (z : Tm Γ ε α) s → h InPEC case n z s
-  send : ∀ {t : Tm Γ (α ➡ β) α} → h InPEC t → h InPEC send t
+  send : ∀ {t : Tm Γ (α ⇾ β) α} → h InPEC t → h InPEC send t
 
 _⟨_⟩ : {h : Tm Γ εₕ αₕ} {t : Tm Γ ε α} → h InPEC t → Tm Γ εₕ αₕ → Tm Γ ε α
 ⟨⟩ ⟨ h' ⟩ = h'
@@ -213,7 +213,7 @@ data _⟶_ : Tm Γ ε α → Tm Γ ε α → Set where
     → u ⟶ u'
     → t · u ⟶ t · u'
 
-  cong-send : {t t' : Tm Γ (α ➡ β) α}
+  cong-send : {t t' : Tm Γ (α ⇾ β) α}
     → t ⟶ t'
     → send t ⟶ send t'
 
@@ -241,7 +241,7 @@ module ⟶*-Reasoning {Γ ε α} where
 data Progress : Tm ∙ ε α → Set where
   done : {t : Tm ∙ ε α} → Val t → Progress t
   step : {t t' : Tm ∙ ε α} → t ⟶ t' → Progress t
-  bare-send : {u : Tm ∙ (α ➡ β) α} {t : Tm ∙ (α ➡ β) γ}
+  bare-send : {u : Tm ∙ (α ⇾ β) α} {t : Tm ∙ (α ⇾ β) γ}
     → send u InPEC t
     → Val u
     → Progress t
@@ -286,12 +286,12 @@ V-unique (ƛ t) (ƛ .t) = refl
 V-unique zero zero = refl
 V-unique (suc v) (suc v') = cong suc (V-unique v v')
 
-V¬sendInPEC : {u : Tm Γ (α ➡ β) α} {t : Tm Γ ε γ}
+V¬sendInPEC : {u : Tm Γ (α ⇾ β) α} {t : Tm Γ ε γ}
   → Val t
   → ¬ (send u InPEC t)
 V¬sendInPEC (suc v) (suc c) = V¬sendInPEC v c
 
-sendInPEC¬⟶ : {u : Tm Γ (α ➡ β) α} {t t' : Tm Γ ε γ}
+sendInPEC¬⟶ : {u : Tm Γ (α ⇾ β) α} {t t' : Tm Γ ε γ}
   → Val u
   → send u InPEC t
   → ¬ (t ⟶ t')
@@ -307,8 +307,8 @@ sendInPEC¬⟶ v (case c z s) (cong-case t⟶t') = sendInPEC¬⟶ v c t⟶t'
 sendInPEC¬⟶ v (send c) (cong-send t⟶t') = sendInPEC¬⟶ v c t⟶t'
 
 sendInPEC-unique-ty : {t : Tm Γ ε α}
-  → {u : Tm Γ (γ ➡ β) γ} (c : send u InPEC t) (v : Val u)
-  → {u' : Tm Γ (δ ➡ β) δ} (c' : send u' InPEC t) (v' : Val u')
+  → {u : Tm Γ (γ ⇾ β) γ} (c : send u InPEC t) (v : Val u)
+  → {u' : Tm Γ (δ ⇾ β) δ} (c' : send u' InPEC t) (v' : Val u')
   → γ ≡ δ
 sendInPEC-unique-ty ⟨⟩ vu ⟨⟩ vu' = refl
 sendInPEC-unique-ty ⟨⟩ vu (send c') vu' = ⊥-elim (V¬sendInPEC vu c')
@@ -322,8 +322,8 @@ sendInPEC-unique-ty (send c) vu ⟨⟩ vu' = ⊥-elim (V¬sendInPEC vu' c)
 sendInPEC-unique-ty (send c) vu (send c') vu' rewrite sendInPEC-unique-ty c vu c' vu' = refl
 
 sendInPEC-unique-tm : {t : Tm Γ ε α}
-  → {u : Tm Γ (γ ➡ β) γ} (c : send u InPEC t) (v : Val u)
-  → {u' : Tm Γ (γ ➡ β) γ} (c' : send u' InPEC t) (v' : Val u')
+  → {u : Tm Γ (γ ⇾ β) γ} (c : send u InPEC t) (v : Val u)
+  → {u' : Tm Γ (γ ⇾ β) γ} (c' : send u' InPEC t) (v' : Val u')
   → u ≡ u'
 sendInPEC-unique-tm ⟨⟩ vu ⟨⟩ vu' = refl
 sendInPEC-unique-tm ⟨⟩ vu (send c') vu' = ⊥-elim (V¬sendInPEC vu c')
@@ -336,7 +336,7 @@ sendInPEC-unique-tm (case c z s) vu (case c' .z .s) vu' rewrite sendInPEC-unique
 sendInPEC-unique-tm (send c) vu ⟨⟩ vu' = ⊥-elim (V¬sendInPEC vu' c)
 sendInPEC-unique-tm (send c) vu (send c') vu' rewrite sendInPEC-unique-tm c vu c' vu' = refl
 
-sendInPEC-unique' : {t : Tm Γ ε α} {u : Tm Γ (γ ➡ β) γ}
+sendInPEC-unique' : {t : Tm Γ ε α} {u : Tm Γ (γ ⇾ β) γ}
   → (c c' : send u InPEC t) (v : Val u)
   → c ≡ c'
 sendInPEC-unique' ⟨⟩ ⟨⟩ vu = refl
@@ -351,8 +351,8 @@ sendInPEC-unique' (send c) ⟨⟩ vu = ⊥-elim (V¬sendInPEC vu c)
 sendInPEC-unique' (send c) (send c') vu rewrite sendInPEC-unique' c c' vu = refl
 
 sendInPEC-unique : {t : Tm Γ ε α}
-  → {u : Tm Γ (γ ➡ β) γ} (c : send u InPEC t) (v : Val u)
-  → {u' : Tm Γ (δ ➡ β) δ} (c' : send u' InPEC t) (v' : Val u')
+  → {u : Tm Γ (γ ⇾ β) γ} (c : send u InPEC t) (v : Val u)
+  → {u' : Tm Γ (δ ⇾ β) δ} (c' : send u' InPEC t) (v' : Val u')
   → c ≅ c'
 sendInPEC-unique c v c' v'
   with refl ← sendInPEC-unique-ty c v c' v'
