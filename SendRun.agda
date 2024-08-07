@@ -243,7 +243,7 @@ module ⟶*-Reasoning {Γ ε α} where
 data Progress : Tm ∙ ε α → Set where
   done : {t : Tm ∙ ε α} → Val t → Progress t
   step : {t t' : Tm ∙ ε α} → t ⟶ t' → Progress t
-  bare-send : {u : Tm ∙ (α ⇾ β) α} {t : Tm ∙ (α ⇾ β) γ}
+  unhandled-send : {u : Tm ∙ (α ⇾ β) α} {t : Tm ∙ (α ⇾ β) γ}
     → send u InPEC t
     → Val u
     → Progress t
@@ -252,29 +252,29 @@ progress : (t : Tm ∙ ε α) → Progress t
 progress (ƛ t) = done (ƛ t)
 progress (t · u) with progress t
 ... | step t⟶t' = step (cong-·₁ t⟶t')
-... | bare-send c v = bare-send (c ·₁ u) v
+... | unhandled-send c v = unhandled-send (c ·₁ u) v
 ... | done (ƛ t') with progress u
 ...   | step u⟶u' = step (cong-·₂ (ƛ t') u⟶u')
-...   | bare-send c v = bare-send ((ƛ t') ·₂ c) v
+...   | unhandled-send c v = unhandled-send ((ƛ t') ·₂ c) v
 ...   | done vu = step (app vu)
 progress (send t) with progress t
 ... | step t⟶t' = step (cong-send t⟶t')
-... | done vt = bare-send ⟨⟩ vt
-... | bare-send c v = bare-send (send c) v
+... | done vt = unhandled-send ⟨⟩ vt
+... | unhandled-send c v = unhandled-send (send c) v
 progress (run t u) with progress t
 ... | step t⟶t' = step (cong-run t⟶t')
 ... | done vt = step (run-value vt)
-... | bare-send c v = step (run-send c v)
+... | unhandled-send c v = step (run-send c v)
 progress zero = done zero
 progress (suc t) with progress t
 ... | step t⟶t' = step (cong-suc t⟶t')
 ... | done vt = done (suc vt)
-... | bare-send c v = bare-send (suc c) v
+... | unhandled-send c v = unhandled-send (suc c) v
 progress (case n z s) with progress n
 ... | step n⟶n' = step (cong-case n⟶n')
 ... | done zero = step case-zero
 ... | done (suc vn) = step (case-suc vn)
-... | bare-send c v = bare-send (case c z s) v
+... | unhandled-send c v = unhandled-send (case c z s) v
 progress (μ t) = step unroll
 
 --------------------------------------------------------------------------------

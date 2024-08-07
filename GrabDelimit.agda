@@ -231,7 +231,7 @@ module ⟶*-Reasoning {Γ ε α} where
 data Progress : Tm ∙ ε α → Set where
   done : {t : Tm ∙ ε α} → Val t → Progress t
   step : {t t' : Tm ∙ ε α} → t ⟶ t' → Progress t
-  bare-grab : {u : Tm (∙ , α ⇒ β ! ε) ε β} {t : Tm ∙ (ε , β) γ}
+  unhandled-grab : {u : Tm (∙ , α ⇒ β ! ε) ε β} {t : Tm ∙ (ε , β) γ}
     → grab u InPEC t
     → Progress t
 
@@ -239,26 +239,26 @@ progress : (t : Tm ∙ ε α) → Progress t
 progress (ƛ t) = done (ƛ t)
 progress (t · u) with progress t
 ... | step t⟶t' = step (cong-·₁ t⟶t')
-... | bare-grab c = bare-grab (c ·₁ u)
+... | unhandled-grab c = unhandled-grab (c ·₁ u)
 ... | done (ƛ t') with progress u
 ...   | step u⟶u' = step (cong-·₂ (ƛ t') u⟶u')
 ...   | done vu = step (app vu)
-...   | bare-grab c = bare-grab ((ƛ t') ·₂ c)
+...   | unhandled-grab c = unhandled-grab ((ƛ t') ·₂ c)
 progress (delimit t) with progress t
 ... | done vt = step (delimit-val vt)
 ... | step t⟶t' = step (cong-delimit t⟶t')
-... | bare-grab c = step (delimit-grab c)
-progress (grab t) = bare-grab ⟨⟩
+... | unhandled-grab c = step (delimit-grab c)
+progress (grab t) = unhandled-grab ⟨⟩
 progress zero = done zero
 progress (suc t) with progress t
 ... | done vt = done (suc vt)
 ... | step t⟶t' = step (cong-suc t⟶t')
-... | bare-grab c = bare-grab (suc c)
+... | unhandled-grab c = unhandled-grab (suc c)
 progress (case n z s) with progress n
 ... | done zero = step case-zero
 ... | done (suc vn) = step (case-suc vn)
 ... | step n⟶n' = step (cong-case n⟶n')
-... | bare-grab c = bare-grab (case c z s)
+... | unhandled-grab c = unhandled-grab (case c z s)
 progress (μ t) = step unroll
 
 --------------------------------------------------------------------------------

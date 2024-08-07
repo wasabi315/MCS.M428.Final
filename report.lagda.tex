@@ -62,6 +62,19 @@
 \newunicodechar{∙}{\ensuremath{\bullet}}
 \newunicodechar{∎}{\ensuremath{\blacksquare}}
 \newunicodechar{μ}{\ensuremath{\mu}}
+\newunicodechar{ₑ}{\ensuremath{{_e}}}
+
+\newcommand\var[1]{\mathit{#1}}
+\newcommand\prim[1]{{\AgdaPrimitive{#1}}}
+\newcommand\ty[1]{{{\prim{Set}}_{#1}}}
+\newcommand\fun[1]{{\AgdaFunction{#1}}}
+\newcommand\data[1]{{\AgdaFunction{#1}}}
+\newcommand\con[1]{{\AgdaInductiveConstructor{#1}}}
+\newcommand\field[1]{{\AgdaField{#1}}}
+\newcommand\keyw[1]{{\AgdaKeyword{#1}}}
+\newcommand\lit[1]{{\AgdaNumber{#1}}}
+\newcommand\level{\fun{Level}}
+\newcommand\ite[3]{\fun{if}\  #1\  \fun{then}\  #2\  \fun{else}\  #3}
 
 \title{{\large{Final Project}}\\Soundness of grab/delimit, send/run, and Effect Handlers}
 \date{\today}
@@ -71,27 +84,488 @@
 
 \maketitle
 
-In this report, we are going to prove using Agda the soundness property of the lambda calculus with each of grab/delimit, send/run, and effect handlers.
-This report is written in Literate Agda. The full source code, tested with agda 2.6.4 and agda-stdlib 2.0, is available on GitHub\footnote[1]{URL}.
+\begin{code}[hide]
+open import Data.Empty using ( ⊥; ⊥-elim )
+open import Data.Maybe using ( Maybe; just; nothing )
+open import Data.Nat using ( ℕ; zero; suc; _<_; _≤?_; z≤n; s≤s )
+open import Data.Product using ( _×_; proj₁; proj₂ )
+open import Data.Sum using ( inj₁; inj₂ )
+open import Data.Unit using ( ⊤ )
+open import Relation.Binary.Construct.Closure.ReflexiveTransitive using ( Star; _◅_ ) renaming ( ε to [] )
+open import Relation.Binary.Construct.Closure.ReflexiveTransitive.Properties using ( module StarReasoning )
+open import Relation.Binary.HeterogeneousEquality using ( _≅_ ) renaming ( refl to hrefl )
+open import Relation.Binary.PropositionalEquality using ( _≡_; refl; cong )
+open import Relation.Nullary using ( ¬_ )
+open import Relation.Nullary.Decidable
+  using ( True; toWitness; Dec; yes; no; ¬?; _⊎-dec_ )
+  renaming ( map′ to mapDec )
+\end{code}
 
 \section{Introduction}
 
-Based on PLFA\cite{plfa22.08}. Intrincically typed, De Bruijn representation.
+In the final project, I will prove the soundness property of the call-by-value lambda calculus with each of grab/delimit, send/run, and effect handlers using Agda.
+Each proof, tested with agda 2.6.4 and agda-stdlib 2.0, is in \texttt{GrabDelimit.agda}, \texttt{SendRun.agda}, and \texttt{AlgEff.agda}, respectively.
+They are also available on GitHub\footnote[1]{https://github.com/wasabi315/lambda-delim-cont}.
 
-\section{grab/delimit}
+The proof is largely based on Programming Language Foundations in Agda (PLFA)\cite{plfa22.08}, specifically the chapter on intrinsically-typed de Bruijn representation (I renamed things a lot, though). It contains a soundness proof (preservation built in to the reduction rules, and progress) of the lambda calculus with natural numbers and the fixpoints. I will extend the proof to include the continuation constructs mentioned above.
+
+\section{Soundness of effect handlers}
+
+In this report, we will focus on the soundness of effect handlers (with value handlers), the most complex of the three constructs. Proofs for the other two constructs are similar. We will not discuss in detail parts of the proof that are similar to PLFA and other properties such as the lemma that values do not reduce and so on.
+
+\subsection{Syntax}
+
+\subsubsection{Signatures}
+
+Signatures consist of a set of operations and their input and output types.
+Here we define a datatype for signatures, \data{Sig}, using a (dependent) record type.
+For now, we only consider natural numbers for the input/output of operations (\data{PTy}).
+We require a decidable equality on operations (\fun{decEq}), which is used later in the definition of effects.
+\begin{code}
+data PTy : Set where
+  `ℕ : PTy
+
+record Sig : Set₁ where
+  field
+    Op : Set -- operation type
+    decEq : (x y : Op) → Dec (x ≡ y)  -- decidable equality on Op
+    In : Op → PTy -- input type of operation
+    Out : Op → PTy -- output type of operation
+\end{code}
+For example, we can define a signature with two operations, \con{op1} and \con{op2}, which both take a natural number and returns a natural number as follows:
+\begin{code}[hide]
+module Ex where
+  open Sig
+\end{code}
+\begin{code}
+  data ExOp : Set where
+    op1 op2 : ExOp
+
+  exSig : Sig
+  Op exSig = ExOp
+  decEq exSig op1 op1 = yes refl
+  decEq exSig op1 op2 = no λ ()
+  decEq exSig op2 op1 = no λ ()
+  decEq exSig op2 op2 = yes refl
+  In exSig op1 = `ℕ
+  Out exSig op1 = `ℕ
+  In exSig op2 = `ℕ
+  Out exSig op2 = `ℕ
+\end{code}
+From here, we assume that we are given one global signature $\Sigma : \data{Sig}$ and may refer to its components as \field{Op}, \field{decEq}, \field{In}, and \field{Out}.
+\begin{code}[hide]
+module M (Σ : Sig) where
+  open Sig Σ
+\end{code}
 
 \begin{code}[hide]
-open import Data.Nat
+  infixr 8 ↑_ ↑H_ ↑Val_ ↑PEC_
+  infixr 7 _⇒_!_
+  infixl 7 _·_ _!_
+  infixl 6 _[_] _⟨_⟩
+  infixl 5 _,_ _,#_
+  infix  5 ƛ_ μ_
+  infix  4 _∋_
+  infix  2 _⟶_ _⟶*_
 \end{code}
+
+\subsubsection{Effects}
+
+Effects are sets (not lists) of operations that may be perfomed in a computation.
+In Agda, we define effects as a datatype \data{Eff} that consists of a list of operations with a proof of distinctness. Here we use \field{decEq} to actually calculate the distinctness.
 
 \begin{code}
-four : ℕ
-four = 4
+  data Eff : Set
+  Distinct : Op → Eff → Set
+
+  data Eff where
+    ι : Eff
+    cons : (ε : Eff) (op : Op) → Distinct op ε → Eff
+
+  pattern _,#_ ε op = cons ε op _
+
+  Distinct op ι = ⊤
+  Distinct op (ε ,# op') = True (¬? (decEq op op')) × Distinct op ε
 \end{code}
 
-\section{send/run}
+\subsubsection{Types, contexts, and de Bruijn indices}
 
-\section{Effect Handlers}
+In the calculus we are formalising, types are either natural numbers or functions with an effect may be perfomed. The datatype \data{Ty} represents these types.
+\begin{code}
+  data Ty : Set where
+    `ℕ : Ty
+    _⇒_!_ : Ty → Ty → Eff → Ty
+\end{code}
+We can inject \data{PTy} into \data{Ty} using the function \fun{pure}.
+We define \fun{In'} and \fun{Out'} that compose the \field{In} and \field{Out} with \fun{pure}, for shorthand.
+\begin{code}
+  pure : PTy → Ty
+  pure `ℕ = `ℕ
+
+  In' Out' : Op → Ty
+  In' op = pure (In op)
+  Out' op = pure (Out op)
+\end{code}
+Same as PLFA, contexts \data{Ctx} are lists of types and de Bruijn indices \data{\_∋\_} are defined as a data type indexed by a context and a type.
+\begin{code}
+  data Ctx : Set where
+    ∙ : Ctx
+    _,_ : Ctx → Ty → Ctx
+\end{code}
+\begin{code}[hide]
+  variable
+    op op' : Op
+    Γ Δ : Ctx
+    α β γ αₕ : Ty
+    ε ε' εₕ : Eff
+\end{code}
+\begin{code}
+  data _∋_ : Ctx → Ty → Set where
+    zero : Γ , α ∋ α
+    suc : Γ ∋ α → Γ , β ∋ α
+\end{code}
+
+\subsubsection{Terms and Handlers}
+
+We extend the terms \data{Tm} defined in PLFA and add two new constructors for effectful computations, \con{\_!\_} and \con{handle}.
+\con{\_!\_} is for operation call. It takes a proof that the operation is in the effect set (\con{\_∋ₑ\_}) and an argument to the operation.
+\con{handle} is for handling effects. It takes a term to be handled and a handler.
+Handlers are is defined in terms of a record type \data{Handler} which consists of a value handler \field{valh} and an effect handler \field{effh}. We can see that \field{effh} is a function that takes an operation in the effect set and returns an appropriate handler for that operation.
+Regarding typing, we basically follow the typing rules we discussed in the lecture and homework.
+One difference with PLFA is that the fixpoint constructor \con{μ\_} only takes functions in our calculus while PLFA allows terms of any type. We will discuss the reason for this later.
+\begin{code}
+  data _∋ₑ_ : Eff → Op → Set where
+    zero : ∀ {p} → cons ε op p ∋ₑ op
+    suc : ∀ {p} → ε ∋ₑ op → cons ε op' p ∋ₑ op
+
+  data Tm : Ctx → Eff → Ty → Set
+  record Handler (Γ : Ctx) (ε ε' : Eff) (α β : Ty) : Set
+
+  data Tm where
+    var : Γ ∋ α → Tm Γ ε α -- variable
+    ƛ_ : Tm (Γ , α) ε β → Tm Γ ε' (α ⇒ β ! ε) -- abstraction
+    _·_ : Tm Γ ε (α ⇒ β ! ε) → Tm Γ ε α → Tm Γ ε β -- application
+    -- unary natural numbers
+    zero : Tm Γ ε `ℕ
+    suc : Tm Γ ε `ℕ → Tm Γ ε `ℕ
+    -- case n of { 0 → z; suc n' → s n' }
+    case : Tm Γ ε `ℕ → Tm Γ ε α → Tm (Γ , `ℕ) ε α → Tm Γ ε α
+    μ_ : Tm (Γ , α ⇒ β ! ε) ε (α ⇒ β ! ε) → Tm Γ ε (α ⇒ β ! ε) -- fixpoint
+    _!_ : ε ∋ₑ op → Tm Γ ε (In' op) → Tm Γ ε (Out' op) -- operation call
+    handle : Tm Γ ε α → Handler Γ ε ε' α β → Tm Γ ε' β -- effect handling
+
+  record Handler Γ ε ε' α β where
+    inductive
+    field
+      valh : Tm (Γ , α) ε' β -- value handler
+      effh : ε ∋ₑ op → Tm (Γ , In' op , Out' op ⇒ β ! ε') ε' β -- effect handler
+\end{code}
+
+\begin{code}[hide]
+  open Handler public
+
+  length : Ctx → ℕ
+  length ∙ = 0
+  length (Γ , _) = suc (length Γ)
+
+  lookup : ∀ {n} → n < length Γ → Ty
+  lookup {_ , α} {zero} (s≤s z≤n) = α
+  lookup {Γ , _} {suc n} (s≤s p) = lookup p
+
+  count : ∀ {n} (p : n < length Γ) → Γ ∋ lookup p
+  count {_ , _} {zero} (s≤s z≤n) = zero
+  count {Γ , _} {suc n} (s≤s p) = suc (count p)
+
+  var# : ∀ n {n∈Γ : True (suc n ≤? length Γ)} → Tm Γ ε (lookup (toWitness n∈Γ))
+  var# n {n∈Γ} = var (count (toWitness n∈Γ))
+
+  _∋ₑ?_ : ∀ ε op → Dec (ε ∋ₑ op)
+  ι ∋ₑ? op = no λ ()
+  cons ε op _ ∋ₑ? op' = mapDec
+    (λ { (inj₁ refl) → zero; (inj₂ p) → suc p })
+    (λ { zero → inj₁ refl; (suc p) → inj₂ p })
+    (decEq op op' ⊎-dec (ε ∋ₑ? op'))
+
+  _!#_ : ∀ op {op∈ₑε : True (ε ∋ₑ? op)} → Tm Γ ε (In' op) → Tm Γ ε (Out' op)
+  _!#_ _ {op∈ₑε} = _!_ (toWitness op∈ₑε)
+
+  effh# : ∀ (h : Handler Γ ε ε' α β) op {op∈ₑε : True (ε ∋ₑ? op)}
+    → Tm (Γ , In' op , Out' op ⇒ β ! ε') ε' β
+  effh# h _ {op∈ₑε} = effh h (toWitness op∈ₑε)
+\end{code}
+
+\subsection{Renaming and Substitution}
+
+We define renaming and substitution functions for terms and handlers in a similar way to PLFA.
+\fun{↑\_} and \fun{↑H\_} are the shift (extending the context) operations for terms and handlers, respectively, and \fun{\_[\_]} is the single substitution operation for terms.
+Note that the effect of terms returned by substitution is quantified rather than parametarised in the definition of \fun{Sub} and \fun{\_[\_]}.
+This is because we are formalising call-by-value semantics where variables do not perform any effectful operations.
+In other words, $\forall \{\varepsilon\} \rightarrow \data{Tm}\ \Gamma\ \varepsilon\ \alpha$ represents a pure term.
+\begin{code}
+  Ren : Ctx → Ctx → Set
+  Ren Γ Δ = ∀ {α} → Γ ∋ α → Δ ∋ α
+\end{code}
+\begin{code}[hide]
+  ext : Ren Γ Δ → Ren (Γ , α) (Δ , α)
+  ext ρ zero = zero
+  ext ρ (suc i) = suc (ρ i)
+
+  ren : Ren Γ Δ → Tm Γ ε α → Tm Δ ε α
+  renH : Ren Γ Δ → Handler Γ ε ε' α β → Handler Δ ε ε' α β
+
+  ren ρ (var i) = var (ρ i)
+  ren ρ (ƛ t) = ƛ ren (ext ρ) t
+  ren ρ (t · u) = ren ρ t · ren ρ u
+  ren ρ zero = zero
+  ren ρ (suc t) = suc (ren ρ t)
+  ren ρ (case n z s) = case (ren ρ n) (ren ρ z) (ren (ext ρ) s)
+  ren ρ (μ t) = μ (ren (ext ρ) t)
+  ren ρ (i ! t) = i ! ren ρ t
+  ren ρ (handle t h) = handle (ren ρ t) (renH ρ h)
+
+  valh (renH ρ h) = ren (ext ρ) (valh h)
+  effh (renH ρ h) op = ren (ext (ext ρ)) (effh h op)
+\end{code}
+\begin{code}
+  ↑_ : Tm Γ ε α → Tm (Γ , β) ε α
+  ↑H_ : Handler Γ ε ε' α β → Handler (Γ , γ) ε ε' α β
+\end{code}
+\begin{code}[hide]
+  ↑_ = ren suc
+  ↑H_ = renH suc
+\end{code}
+\begin{code}
+  Sub : Ctx → Ctx → Set
+  Sub Γ Δ = ∀ {α} → Γ ∋ α → (∀ {ε} → Tm Δ ε α)
+\end{code}
+\begin{code}[hide]
+  exts : Sub Γ Δ → Sub (Γ , α) (Δ , α)
+  exts σ zero = var zero
+  exts σ (suc i) = ↑ (σ i)
+
+  sub : Sub Γ Δ → Tm Γ ε α → Tm Δ ε α
+  subH : Sub Γ Δ → Handler Γ ε ε' α β → Handler Δ ε ε' α β
+
+  sub σ (var i) = σ i
+  sub σ (ƛ t) = ƛ sub (exts σ) t
+  sub σ (t · u) = sub σ t · sub σ u
+  sub σ zero = zero
+  sub σ (suc t) = suc (sub σ t)
+  sub σ (case n z s) = case (sub σ n) (sub σ z) (sub (exts σ) s)
+  sub σ (μ t) = μ (sub (exts σ) t)
+  sub σ (i ! t) = i ! sub σ t
+  sub σ (handle t h) = handle (sub σ t) (subH σ h)
+
+  valh (subH σ h) = sub (exts σ) (valh h)
+  effh (subH σ h) op = sub (exts (exts σ)) (effh h op)
+\end{code}
+\begin{code}
+  _[_] : Tm (Γ , α) ε β → (∀ {ε'} → Tm Γ ε' α) → Tm Γ ε β
+\end{code}
+\begin{code}[hide]
+  t [ u ] = sub (λ { zero → u; (suc i) → var i }) t
+\end{code}
+
+\subsection{Values}
+
+In our calculus, values are either abstractions or natural numbers. This is the same as PLFA.
+\begin{code}
+  data Val : Tm Γ ε α → Set where
+    ƛ_ : (t : Tm (Γ , α) ε β) → Val {Γ} {ε'} (ƛ t)
+    zero : Val {Γ} {ε} zero
+    suc : {t : Tm Γ ε `ℕ} → Val t → Val (suc t)
+\end{code}
+\begin{code}[hide]
+  renVal : (ρ : Ren Γ Δ) {t : Tm Γ ε α} → Val t → Val (ren ρ t)
+  renVal ρ (ƛ t) = ƛ ren (ext ρ) t
+  renVal ρ zero = zero
+  renVal ρ (suc v) = suc (renVal ρ v)
+
+  ↑Val_ : {t : Tm Γ ε α} → Val t → Val {Γ , β} (↑ t)
+  ↑Val_ = renVal suc
+\end{code}
+Here we define a function \fun{coe}. It takes a proof that a term is a value and returns a term with a different effect set. This is possible because values themselves do not perform any effectful operations. This function will be used later in the reduction rules.
+\begin{code}
+  coe : {t : Tm Γ ε α} → Val t → Tm Γ ε' α
+  coe (ƛ t) = ƛ t
+  coe zero = zero
+  coe (suc v) = suc (coe v)
+\end{code}
+
+\subsection{Pure Evaluation Contexts}
+
+As a calculus that deals with continuations, we need to develop a notion of evaluation contexts as we did in the lecture.
+The following datatype $h\ \data{InPEC}\ t$ is a relation that represents $h$ is in a pure evaluation context of $t$.
+This is the same as what we did in the lecture but with the \con{case} and \con{suc} cases added.
+\begin{code}
+  data _InPEC_ (h : Tm Γ εₕ αₕ) : Tm Γ ε α → Set where
+    ⟨⟩ : h InPEC h
+    _·₁_ : ∀ {t : Tm Γ ε (α ⇒ β ! ε)} (c : h InPEC t) u → h InPEC (t · u)
+    _·₂_ : ∀ {t : Tm Γ ε (α ⇒ β ! ε)} {u} → Val t → h InPEC u → h InPEC (t · u)
+    suc : {t : Tm Γ ε `ℕ} → h InPEC t → h InPEC (suc t)
+    case : ∀ {n} (c : h InPEC n) (z : Tm Γ ε α) s → h InPEC case n z s
+    _!_ : (i : ε ∋ₑ op) {t : Tm Γ ε (In' op)} → h InPEC t → h InPEC (i ! t)
+\end{code}
+\fun{\_⟨\_⟩} is a function that replaces a term in a pure evaluation context.
+\begin{code}
+  _⟨_⟩ : {h : Tm Γ εₕ αₕ} {t : Tm Γ ε α} → h InPEC t → Tm Γ εₕ αₕ → Tm Γ ε α
+\end{code}
+\begin{code}[hide]
+  ⟨⟩ ⟨ h' ⟩ = h'
+  (c ·₁ t) ⟨ h' ⟩ = (c ⟨ h' ⟩) · t
+  (_·₂_ {t = t} _ c) ⟨ h' ⟩ = t · (c ⟨ h' ⟩)
+  suc c ⟨ h' ⟩ = suc (c ⟨ h' ⟩)
+  case c z s ⟨ h' ⟩ = case (c ⟨ h' ⟩) z s
+  (i ! c) ⟨ h' ⟩ = i ! (c ⟨ h' ⟩)
+
+  renPEC : (ρ : Ren Γ Δ) {h : Tm Γ εₕ αₕ} {t : Tm Γ ε α}
+    → h InPEC t
+    → ren ρ h InPEC ren ρ t
+  renPEC ρ ⟨⟩ = ⟨⟩
+  renPEC ρ (c ·₁ u) = renPEC ρ c ·₁ ren ρ u
+  renPEC ρ (v ·₂ c) = renVal ρ v ·₂ renPEC ρ c
+  renPEC ρ (suc c) = suc (renPEC ρ c)
+  renPEC ρ (case c z s) = case (renPEC ρ c) (ren ρ z) (ren (ext ρ) s)
+  renPEC ρ (i ! c) = i ! renPEC ρ c
+\end{code}
+\fun{↑PEC\_} is the shifting operation for the \data{\_InPEC\_} datatype. As we can see from the type signature, this function states the fact that shifting does not change the \data{\_InPEC\_} relation.
+\begin{code}
+  ↑PEC_ : {h : Tm Γ εₕ αₕ} {t : Tm Γ ε α} → h InPEC t → (↑_ {β = β} h) InPEC (↑ t)
+\end{code}
+\begin{code}[hide]
+  ↑PEC_ = renPEC suc
+\end{code}
+
+\subsection{Reduction rules}
+
+Now we define the reduction rules for the calculus.
+The first two rules are for constructs that we added.
+The \con{handle-value} rules states that the $\con{handle}\ t\ h$ construct reduces to $t$ applied to the value handler.
+Here we use the \fun{coe} function to suit the effect set of $t$.
+\begin{AgdaAlign}
+\begin{code}
+  data _⟶_ : Tm Γ ε α → Tm Γ ε α → Set where
+    handle-value : ∀ {t} (v : Val t) {h : Handler Γ ε ε' α β}
+      → handle t h ⟶ valh h [ coe v ]
+\end{code}
+The \con{handle-!} rule states that, if an operation call is in a pure evaluation context of a term being handled, then handle the operation call with the effect handler.
+We can see that the continuation of the operation call is given to the effect handler.
+\begin{code}
+    handle-! : ∀ {i : ε ∋ₑ op} {t u}
+      → (c : (i ! u) InPEC t)
+      → (v : Val u)
+      → {h : Handler Γ ε ε' α β}
+      → handle t h ⟶ effh h i [ ƛ handle ((↑PEC ↑PEC c) ⟨ var zero ⟩) (↑H ↑H h) ] [ coe v ]
+\end{code}
+Here is the rule for the fixpoint. When we encounter a fixpoint of a function $t$, we reduce it to $t$ given
+the fixpoint itself but $\eta$-expanded. Why do we need $\eta$-expansion here? This is because the substitution function $\fun{\_[\_]}$ only takes a pure term, a term with quantified effect set, as an argument.
+We can not assume that all terms are pure, but we can make any function pure by $\eta$-expansion.
+This is the reason that we restrict the fixpoint constructor to only take functions.
+I believe this treatment is not really a problem because our calculus is call-by-value, therefore passing non-function terms would always result in infinite loops.
+\begin{code}
+    unroll : {t : Tm (Γ , α ⇒ β ! ε) ε (α ⇒ β ! ε)}
+      → μ t ⟶ t [ ƛ (↑ (μ t)) · var zero ]
+\end{code}
+Here are other reduction rules.
+\begin{code}
+    app : ∀ {t : Tm (Γ , α) ε β} {u}
+      → (v : Val u)
+      → (ƛ t) · u ⟶ t [ coe v ]
+
+    case-zero : ∀ {z : Tm Γ ε α} {s}
+      → case zero z s ⟶ z
+
+    case-suc : ∀ {n} (v : Val n) {z : Tm Γ ε α} {s}
+      → case (suc n) z s ⟶ s [ coe v ]
+\end{code}
+One-step reductions are defined as congruence rules below, rather than defining evaluation contexts separetely as in the lecture.
+\begin{code}
+    cong-·₁ : {t t' : Tm Γ ε (α ⇒ β ! ε)}
+      → t ⟶ t'
+      → ∀ {u} → t · u ⟶ t' · u
+
+    cong-·₂ : ∀ {t : Tm Γ ε (α ⇒ β ! ε)} (v : Val t) {u u'}
+      → u ⟶ u'
+      → t · u ⟶ t · u'
+
+    cong-! : {i : ε ∋ₑ op} {t t' : Tm Γ ε (In' op)}
+      → t ⟶ t'
+      → (i ! t) ⟶ (i ! t')
+
+    cong-handle : ∀ {t t'}
+      → t ⟶ t'
+      → {h : Handler Γ ε ε' α β} → handle t h ⟶ handle t' h
+
+    cong-suc : {t t' : Tm Γ ε `ℕ}
+      → t ⟶ t'
+      → suc t ⟶ suc t'
+
+    cong-case : ∀ {n n'}
+      → n ⟶ n'
+      → ∀ {z : Tm Γ ε α} {s} → case n z s ⟶ case n' z s
+\end{code}
+\end{AgdaAlign}
+Note the type of the \data{\_⟶\_} relation. It is a relation between two terms of the same type and effect set.
+This means that the reduction rules satsify the preservation property.
+
+By using the \data{Star} type from the standard library, we can construct the reflexive-transitive closure of the reduction relation.
+\begin{code}
+  _⟶*_ : Tm Γ ε α → Tm Γ ε α → Set
+  _⟶*_ = Star _⟶_
+\end{code}
+
+\subsection{Progress}
+
+Finally we prove the progress property of our calculus.
+In the simply typed lambda calculus, progress states that a well-typed term is either a value or can take a step.
+In our calculus, we have to consider one more case: an operation call that is not handled.
+The \data{Progress} datatype below encodes the three cases. The \con{unhandled-!} case is for an operation call that is not handled. It takes a proof that an operation call $i\ \fun{!}\ u$ is in a pure evaluation context of a term $t$, and $u$ is a value. In other words, this case states that we could have handled the operation call if we have a $\con{handle}$ surrounding $t$. The \con{unhandled-!} case is not possible in case that the index $\varepsilon$ is $\con{\iota}$ as $\con{\iota}\ \data{∋ₑ}\ \var{op}$ is uninhabited.
+\begin{code}
+  data Progress : Tm ∙ ε α → Set where
+    done : {t : Tm ∙ ε α} → Val t → Progress t
+    step : {t t' : Tm ∙ ε α} → t ⟶ t' → Progress t
+    unhandled-! : {i : ε ∋ₑ op} {u : Tm ∙ ε (In' op)} {t : Tm ∙ ε γ}
+      → (c : (i ! u) InPEC t)
+      → Val u
+      → Progress t
+\end{code}
+The \fun{progress} function below is a proof of the progress property.
+It is shown using induction on \data{Tm}.
+The proof flows similarly to the proof in PLFA, but we have to consider the unhandled operation calls which originate from the $i\ \fun{!}\ t$ case.
+For example, in the $\con{suc}\ t$ case, we have a subcase where $t$ results in unhandled operation calls.
+In this case, we propagate $\con{unhandled-!}$ but wrap the evaluation context into a larger one with \con{suc}.
+This propagated $\con{unhandled-!}$ will be handled by the \con{handle} case.
+\begin{code}
+  progress : (t : Tm ∙ ε α) → Progress t
+  progress (ƛ t) = done (ƛ t)
+  progress (t · u) with progress t
+  ... | step t⟶t' = step (cong-·₁ t⟶t')
+  ... | unhandled-! c v = unhandled-! (c ·₁ u) v
+  ... | done (ƛ t') with progress u
+  ...   | step u⟶u' = step (cong-·₂ (ƛ t') u⟶u')
+  ...   | unhandled-! c v = unhandled-! ((ƛ t') ·₂ c) v
+  ...   | done vu = step (app vu)
+  progress (i ! t) with progress t
+  ... | step t⟶t' = step (cong-! t⟶t')
+  ... | done vt = unhandled-! ⟨⟩ vt
+  ... | unhandled-! c v = unhandled-! (i ! c) v
+  progress (handle t h) with progress t
+  ... | step t⟶t' = step (cong-handle t⟶t')
+  ... | done vt = step (handle-value vt)
+  ... | unhandled-! c v = step (handle-! c v)
+  progress zero = done zero
+  progress (suc t) with progress t
+  ... | step t⟶t' = step (cong-suc t⟶t')
+  ... | done vt = done (suc vt)
+  ... | unhandled-! c v = unhandled-! (suc c) v
+  progress (case n z s) with progress n
+  ... | step n⟶n' = step (cong-case n⟶n')
+  ... | done zero = step case-zero
+  ... | done (suc vn) = step (case-suc vn)
+  ... | unhandled-! c v = unhandled-! (case c z s) v
+  progress (μ t) = step unroll
+\end{code}
+Together with the fact that the preservation property holds (by construction), we have proved the soundness of the calculus.
 
 \bibliographystyle{plain}
 \bibliography{refs.bib}

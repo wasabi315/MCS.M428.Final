@@ -23,8 +23,8 @@ record Sig : Set₁ where
   field
     Op : Set
     decEq : (x y : Op) → Dec (x ≡ y)
-    Dom : Op → PTy
-    Cod : Op → PTy
+    In : Op → PTy
+    Out : Op → PTy
 
 -- Fix a signature
 module M (Σ : Sig) where
@@ -66,9 +66,9 @@ module M (Σ : Sig) where
   pure : PTy → Ty
   pure `ℕ = `ℕ
 
-  Dom' Cod' : Op → Ty
-  Dom' op = pure (Dom op)
-  Cod' op = pure (Cod op)
+  In' Out' : Op → Ty
+  In' op = pure (In op)
+  Out' op = pure (Out op)
 
   variable
     op op' : Op
@@ -95,7 +95,7 @@ module M (Σ : Sig) where
     suc : Tm Γ ε `ℕ → Tm Γ ε `ℕ
     case : Tm Γ ε `ℕ → Tm Γ ε α → Tm (Γ , `ℕ) ε α → Tm Γ ε α
     μ_ : Tm (Γ , α ⇒ β ! ε) ε (α ⇒ β ! ε) → Tm Γ ε (α ⇒ β ! ε)
-    _!_ : ε ∋ₑ op → Tm Γ ε (Dom' op) → Tm Γ ε (Cod' op)
+    _!_ : ε ∋ₑ op → Tm Γ ε (In' op) → Tm Γ ε (Out' op)
     handle : Tm Γ ε α → Handler Γ ε ε' α β → Tm Γ ε' β
 
   record Handler Γ ε ε' α β where
@@ -103,7 +103,7 @@ module M (Σ : Sig) where
     no-eta-equality
     field
       valh : Tm (Γ , α) ε' β
-      effh : ε ∋ₑ op → Tm (Γ , Dom' op , Cod' op ⇒ β ! ε') ε' β
+      effh : ε ∋ₑ op → Tm (Γ , In' op , Out' op ⇒ β ! ε') ε' β
 
   open Handler public
 
@@ -131,11 +131,11 @@ module M (Σ : Sig) where
     (λ { zero → inj₁ refl; (suc p) → inj₂ p })
     (decEq op op' ⊎-dec (ε ∋ₑ? op'))
 
-  _!#_ : ∀ op {op∈ₑε : True (ε ∋ₑ? op)} → Tm Γ ε (Dom' op) → Tm Γ ε (Cod' op)
+  _!#_ : ∀ op {op∈ₑε : True (ε ∋ₑ? op)} → Tm Γ ε (In' op) → Tm Γ ε (Out' op)
   _!#_ _ {op∈ₑε} = _!_ (toWitness op∈ₑε)
 
   effh# : ∀ (h : Handler Γ ε ε' α β) op {op∈ₑε : True (ε ∋ₑ? op)}
-    → Tm (Γ , Dom' op , Cod' op ⇒ β ! ε') ε' β
+    → Tm (Γ , In' op , Out' op ⇒ β ! ε') ε' β
   effh# h _ {op∈ₑε} = effh h (toWitness op∈ₑε)
 
 --------------------------------------------------------------------------------
@@ -226,7 +226,7 @@ module M (Σ : Sig) where
     _·₂_ : ∀ {t : Tm Γ ε (α ⇒ β ! ε)} {u} → Val t → h InPEC u → h InPEC (t · u)
     suc : {t : Tm Γ ε `ℕ} → h InPEC t → h InPEC (suc t)
     case : ∀ {n} (c : h InPEC n) (z : Tm Γ ε α) s → h InPEC case n z s
-    _!_ : (i : ε ∋ₑ op) {t : Tm Γ ε (Dom' op)} → h InPEC t → h InPEC (i ! t)
+    _!_ : (i : ε ∋ₑ op) {t : Tm Γ ε (In' op)} → h InPEC t → h InPEC (i ! t)
 
   _⟨_⟩ : {h : Tm Γ εₕ αₕ} {t : Tm Γ ε α} → h InPEC t → Tm Γ εₕ αₕ → Tm Γ ε α
   ⟨⟩ ⟨ h' ⟩ = h'
@@ -293,7 +293,7 @@ module M (Σ : Sig) where
       → u ⟶ u'
       → t · u ⟶ t · u'
 
-    cong-! : {i : ε ∋ₑ op} {t t' : Tm Γ ε (Dom' op)}
+    cong-! : {i : ε ∋ₑ op} {t t' : Tm Γ ε (In' op)}
       → t ⟶ t'
       → (i ! t) ⟶ (i ! t')
 
@@ -321,7 +321,7 @@ module M (Σ : Sig) where
   data Progress : Tm ∙ ε α → Set where
     done : {t : Tm ∙ ε α} → Val t → Progress t
     step : {t t' : Tm ∙ ε α} → t ⟶ t' → Progress t
-    bare-! : {i : ε ∋ₑ op} {u : Tm ∙ ε (Dom' op)} {t : Tm ∙ ε γ}
+    unhandled-! : {i : ε ∋ₑ op} {u : Tm ∙ ε (In' op)} {t : Tm ∙ ε γ}
       → (c : (i ! u) InPEC t)
       → Val u
       → Progress t
@@ -330,29 +330,29 @@ module M (Σ : Sig) where
   progress (ƛ t) = done (ƛ t)
   progress (t · u) with progress t
   ... | step t⟶t' = step (cong-·₁ t⟶t')
-  ... | bare-! c v = bare-! (c ·₁ u) v
+  ... | unhandled-! c v = unhandled-! (c ·₁ u) v
   ... | done (ƛ t') with progress u
   ...   | step u⟶u' = step (cong-·₂ (ƛ t') u⟶u')
-  ...   | bare-! c v = bare-! ((ƛ t') ·₂ c) v
+  ...   | unhandled-! c v = unhandled-! ((ƛ t') ·₂ c) v
   ...   | done vu = step (app vu)
   progress (i ! t) with progress t
   ... | step t⟶t' = step (cong-! t⟶t')
-  ... | done vt = bare-! ⟨⟩ vt
-  ... | bare-! c v = bare-! (i ! c) v
+  ... | done vt = unhandled-! ⟨⟩ vt
+  ... | unhandled-! c v = unhandled-! (i ! c) v
   progress (handle t h) with progress t
   ... | step t⟶t' = step (cong-handle t⟶t')
   ... | done vt = step (handle-value vt)
-  ... | bare-! c v = step (handle-! c v)
+  ... | unhandled-! c v = step (handle-! c v)
   progress zero = done zero
   progress (suc t) with progress t
   ... | step t⟶t' = step (cong-suc t⟶t')
   ... | done vt = done (suc vt)
-  ... | bare-! c v = bare-! (suc c) v
+  ... | unhandled-! c v = unhandled-! (suc c) v
   progress (case n z s) with progress n
   ... | step n⟶n' = step (cong-case n⟶n')
   ... | done zero = step case-zero
   ... | done (suc vn) = step (case-suc vn)
-  ... | bare-! c v = bare-! (case c z s) v
+  ... | unhandled-! c v = unhandled-! (case c z s) v
   progress (μ t) = step unroll
 
 --------------------------------------------------------------------------------
@@ -366,12 +366,12 @@ module M (Σ : Sig) where
   V-unique zero zero = refl
   V-unique (suc v) (suc v') = cong suc (V-unique v v')
 
-  V¬!InPEC : {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)} {t : Tm Γ ε γ}
+  V¬!InPEC : {i : ε ∋ₑ op} {u : Tm Γ ε (In' op)} {t : Tm Γ ε γ}
     → Val t
     → ¬ ((i ! u) InPEC t)
   V¬!InPEC (suc v) (suc c) = V¬!InPEC v c
 
-  !InPEC¬⟶ : {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)} {t t' : Tm Γ ε γ}
+  !InPEC¬⟶ : {i : ε ∋ₑ op} {u : Tm Γ ε (In' op)} {t t' : Tm Γ ε γ}
     → Val u
     → (i ! u) InPEC t
     → ¬ (t ⟶ t')
@@ -387,8 +387,8 @@ module M (Σ : Sig) where
   !InPEC¬⟶ v (i ! c) (cong-! t⟶t') = !InPEC¬⟶ v c t⟶t'
 
   !InPEC-unique-op : {t : Tm Γ ε α}
-    → {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)} (c : (i ! u) InPEC t) (v : Val u)
-    → {i' : ε ∋ₑ op'} {u' : Tm Γ ε (Dom' op')} (c' : (i' ! u') InPEC t) (v' : Val u')
+    → {i : ε ∋ₑ op} {u : Tm Γ ε (In' op)} (c : (i ! u) InPEC t) (v : Val u)
+    → {i' : ε ∋ₑ op'} {u' : Tm Γ ε (In' op')} (c' : (i' ! u') InPEC t) (v' : Val u')
     → op ≡ op'
   !InPEC-unique-op ⟨⟩ vu ⟨⟩ vu' = refl
   !InPEC-unique-op ⟨⟩ vu (_ ! c') vu' = ⊥-elim (V¬!InPEC vu c')
@@ -412,8 +412,8 @@ module M (Σ : Sig) where
   ∋ₑ-unique (suc i) (suc i') rewrite ∋ₑ-unique i i' = refl
 
   !InPEC-unique-tm : {t : Tm Γ ε α} {i : ε ∋ₑ op}
-    → {u : Tm Γ ε (Dom' op)} (c : (i ! u) InPEC t) (v : Val u)
-    → {u' : Tm Γ ε (Dom' op)} (c : (i ! u') InPEC t) (v' : Val u')
+    → {u : Tm Γ ε (In' op)} (c : (i ! u) InPEC t) (v : Val u)
+    → {u' : Tm Γ ε (In' op)} (c : (i ! u') InPEC t) (v' : Val u')
     → u ≡ u'
   !InPEC-unique-tm ⟨⟩ vu ⟨⟩ vu' = refl
   !InPEC-unique-tm ⟨⟩ vu (_ ! c') vu' = ⊥-elim (V¬!InPEC vu c')
@@ -426,7 +426,7 @@ module M (Σ : Sig) where
   !InPEC-unique-tm (i ! c) vu ⟨⟩ vu' = ⊥-elim (V¬!InPEC vu' c)
   !InPEC-unique-tm (i ! c) vu (.i ! c') vu' rewrite !InPEC-unique-tm c vu c' vu' = refl
 
-  !InPEC-unique' : {t : Tm Γ ε α} {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)}
+  !InPEC-unique' : {t : Tm Γ ε α} {i : ε ∋ₑ op} {u : Tm Γ ε (In' op)}
     → (c c' : (i ! u) InPEC t) (v : Val u)
     → c ≡ c'
   !InPEC-unique' ⟨⟩ ⟨⟩ vu = refl
@@ -441,8 +441,8 @@ module M (Σ : Sig) where
   !InPEC-unique' (i ! c) (.i ! c') vu rewrite !InPEC-unique' c c' vu = refl
 
   !InPEC-unique : {t : Tm Γ ε α}
-    → {i : ε ∋ₑ op} {u : Tm Γ ε (Dom' op)} (c : (i ! u) InPEC t) (v : Val u)
-    → {i' : ε ∋ₑ op'} {u' : Tm Γ ε (Dom' op')} (c' : (i' ! u') InPEC t) (v' : Val u')
+    → {i : ε ∋ₑ op} {u : Tm Γ ε (In' op)} (c : (i ! u) InPEC t) (v : Val u)
+    → {i' : ε ∋ₑ op'} {u' : Tm Γ ε (In' op')} (c' : (i' ! u') InPEC t) (v' : Val u')
     → c ≅ c'
   !InPEC-unique {i = i} c v {i'} c' v'
     with refl ← !InPEC-unique-op c v c' v'
@@ -511,10 +511,10 @@ decEq exSig op1 op1 = yes refl
 decEq exSig op1 op2 = no λ ()
 decEq exSig op2 op1 = no λ ()
 decEq exSig op2 op2 = yes refl
-Dom exSig op1 = `ℕ
-Cod exSig op1 = `ℕ
-Dom exSig op2 = `ℕ
-Cod exSig op2 = `ℕ
+In exSig op1 = `ℕ
+Out exSig op1 = `ℕ
+In exSig op2 = `ℕ
+Out exSig op2 = `ℕ
 
 open M exSig
 
